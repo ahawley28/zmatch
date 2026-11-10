@@ -1,0 +1,1420 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Smith Chart Matcher</title>
+<style>
+:root{
+  --top:#2a2a2a; --text:#222; --muted:#777; --line:#dedede; --gutter:#f2f2f2; --gutterLine:#d2d2d2; --hover:#f8fafd;
+  --blue:#2d70b3; --accent:#2f72dc; --red:#c74440; --green:#388c46; --purple:#6042a6; --orange:#fa7e19;
+  --chartbg:#ffffff; --grid:#dcdcdc; --gridMajor:#acacac; --gridY:#eec7c2; --grid1:#4a4a4a; --ink:#000;
+  --target:#fa7e19; --good:#388c46; --bad:#c74440; --input:#f6f6f6; --panel:#fff;
+  --math:"Times New Roman",Times,"Cambria Math",serif;
+  --ui:"Helvetica Neue",Helvetica,Arial,sans-serif;
+  --mono:ui-monospace,Consolas,"Cascadia Mono",monospace;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;font:14px/1.35 var(--ui);color:var(--text);background:#fff;display:flex;flex-direction:column;overflow:hidden}
+button,input,select{font:inherit;color:inherit}
+.sp{flex:1}
+
+/* ----- top bar ----- */
+.topbar{height:46px;flex:none;background:var(--top);color:#fff;display:flex;align-items:center;gap:8px;padding:0 12px;position:relative;z-index:20}
+.topbar .title{font-size:17px;letter-spacing:.01em}
+.topbar button{background:transparent;border:1px solid #5a5a5a;color:#eee;border-radius:4px;padding:5px 12px;font-size:13px;cursor:pointer}
+.topbar button:hover{background:#3b3b3b}
+.helppop{position:absolute;right:12px;top:52px;width:min(460px,calc(100vw - 24px));background:#fff;border:1px solid #c8c8c8;border-radius:6px;box-shadow:0 6px 22px rgba(0,0,0,.2);padding:10px 14px;z-index:30;font-size:13px;color:#444}
+.helppop[hidden]{display:none}
+.helppop ul{margin:4px 0;padding-left:18px}
+.helppop li{margin:4px 0}
+
+/* ----- layout ----- */
+.main{flex:1;display:flex;min-height:0}
+.list{width:440px;flex:none;border-right:1px solid #b9b9b9;display:flex;flex-direction:column;min-height:0;box-shadow:2px 0 8px rgba(0,0,0,.07);z-index:5;background:#fff}
+.listbar{height:42px;flex:none;background:#ececec;border-bottom:1px solid #c9c9c9;display:flex;align-items:center;gap:6px;padding:0 6px;position:relative}
+.lbtn{height:30px;min-width:30px;background:#fff;border:1px solid #c4c4c4;border-radius:4px;cursor:pointer;font-size:20px;line-height:1;color:#444;padding:0 8px}
+.lbtn.txt{font-size:13px;color:#555}
+.lbtn:hover{border-color:#999}
+.addrow{display:flex;align-items:center;gap:8px;padding:8px 10px 8px 56px;border-bottom:1px solid var(--line);position:relative;background:#fff}
+.addbtn{height:30px;background:#fff;border:1.5px dashed #b8b8b8;border-radius:5px;padding:0 14px;cursor:pointer;color:#444;font-size:13.5px}
+.addbtn:hover{border-color:var(--accent);color:var(--accent);background:#f5f8fe}
+.addmenu{position:absolute;top:calc(100% - 4px);left:56px;background:#fff;border:1px solid #c4c4c4;border-radius:6px;box-shadow:0 6px 20px rgba(0,0,0,.18);padding:5px 0;z-index:15;min-width:210px}
+.addmenu[hidden]{display:none}
+.addmenu button{display:flex;align-items:center;gap:10px;width:100%;text-align:left;border:0;background:none;padding:7px 14px;cursor:pointer}
+.addmenu button:hover{background:#eef3fb}
+.addmenu .k{font-family:var(--math);font-style:italic;font-size:17px;width:22px;color:#000}
+.addmenu hr{border:0;border-top:1px solid #e3e3e3;margin:4px 0}
+.rows{flex:1;overflow:auto}
+
+/* section (folder-like) rows */
+.sect{display:flex;align-items:center;gap:8px;padding:8px 12px;background:#fafafa;border-bottom:1px solid var(--line);font-weight:600;color:#444;cursor:pointer;user-select:none;font-size:13px}
+.sect:hover{background:#f3f3f3}
+.sect .car{display:inline-block;width:10px;color:#888;transition:transform .15s}
+.sect.closed .car{transform:rotate(-90deg)}
+.sect.closed + .sbody{display:none}
+
+/* expression rows */
+.item{display:flex;border-bottom:1px solid var(--line);min-height:50px;position:relative;background:#fff}
+.item:hover{background:var(--hover)}
+.gut{width:44px;flex:none;background:var(--gutter);border-right:1px solid var(--gutterLine);display:flex;flex-direction:column;align-items:center;padding-top:5px;gap:5px;font-size:11px;color:#8a8a8a}
+.item:focus-within .gut{background:var(--accent);color:#fff;border-right-color:var(--accent)}
+.icon{width:20px;height:20px;border-radius:50%;background:var(--c);border:2px solid var(--c);flex:none}
+.icon.btn{cursor:pointer}
+.icon.off{background:#fff}
+.icon.sq{border-radius:3px;width:16px;height:16px;margin-top:2px}
+.icon.ring{background:#fff;border-width:3px}
+.item:focus-within .icon{border-color:#fff}
+.item:focus-within .icon.off{background:transparent}
+.cont{flex:1;padding:7px 10px 8px 12px;min-width:0}
+.cap{font-size:11.5px;color:#999;letter-spacing:.02em;margin-bottom:1px}
+.eq{display:flex;align-items:baseline;gap:6px;flex-wrap:wrap}
+.math{font-family:var(--math);font-size:20px;color:#000;white-space:nowrap}
+.math i{font-style:italic}
+.math sub{font-size:.62em}
+.unit{font-size:13px;color:#666}
+input[type=number]{border:0;border-bottom:1.5px solid transparent;background:transparent;width:86px;padding:0 2px;font-family:var(--math);font-size:20px;color:#000;-moz-appearance:textfield;appearance:textfield}
+input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
+input[type=number]:hover{border-bottom-color:#cfcfcf}
+input[type=number]:focus{outline:none;border-bottom-color:var(--accent)}
+input.sm{width:62px}
+.opts{display:flex;gap:6px 12px;align-items:center;flex-wrap:wrap;font-size:13px;color:#555;margin-top:5px}
+.opts input[type=number]{font-family:var(--ui);font-size:13.5px;width:58px;border-bottom:1px solid #d6d6d6}
+.opts input[type=text]{font-family:var(--ui);font-size:13.5px;width:70px;border:0;border-bottom:1px solid #d6d6d6;background:transparent;padding:0 2px;outline:none}
+.opts input[type=text]:focus{border-bottom-color:var(--accent)}
+.opts label{display:inline-flex;align-items:center;gap:4px}
+select{font-size:13px;border:1px solid #c8c8c8;border-radius:4px;background:#fff;padding:2px 5px;color:#333}
+.sub{font-size:12.5px;color:#7a7a7a;font-variant-numeric:tabular-nums;margin-top:4px}
+.sub[data-info]{white-space:pre-line;line-height:1.5}
+.srow{display:flex;align-items:center;gap:8px;margin-top:5px;font-size:12px;color:#777}
+.srow input[type=number]{font-family:var(--ui);font-size:12.5px;width:54px;border-bottom:1px solid #d6d6d6}
+input[type=range]{-webkit-appearance:none;appearance:none;flex:1;height:20px;background:transparent;min-width:110px;margin:0;cursor:pointer}
+input[type=range]:focus{outline:none}
+input[type=range]::-webkit-slider-runnable-track{height:3px;background:#c6c6c6;border-radius:2px}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;border-radius:50%;background:var(--c,var(--blue));margin-top:-6.5px;border:0;box-shadow:0 0 0 4px rgba(0,0,0,.06)}
+input[type=range]:focus::-webkit-slider-thumb{box-shadow:0 0 0 5px rgba(47,114,220,.25)}
+input[type=range]::-moz-range-track{height:3px;background:#c6c6c6;border-radius:2px}
+input[type=range]::-moz-range-thumb{width:16px;height:16px;border-radius:50%;background:var(--c,var(--blue));border:0}
+.rowbtns{position:absolute;right:4px;top:3px;display:none;gap:0}
+.item:hover .rowbtns,.item:focus-within .rowbtns{display:flex}
+.rowbtns button{border:0;background:transparent;color:#999;font-size:15px;cursor:pointer;padding:0 5px;line-height:1.4}
+.rowbtns button:hover{color:#000}
+.rowbtns button.on{color:var(--accent)}
+.fvbtn{border:1px solid #c4c4c4;background:#fff;border-radius:4px;padding:1px 9px;cursor:pointer;font-size:13px;color:#444;margin-left:4px}
+.fvbtn:hover{border-color:var(--accent);color:var(--accent)}
+.fvbtn.on{background:var(--accent);border-color:var(--accent);color:#fff}
+.readcard.offf0 .rchead{color:var(--accent)}
+.seg{display:inline-flex;border:1px solid #c4c4c4;border-radius:4px;overflow:hidden}
+.seg button{border:0;background:#fff;padding:3px 10px;cursor:pointer;font-size:13px;color:#444}
+.seg button+button{border-left:1px solid #c4c4c4}
+.seg button.on{background:var(--accent);color:#fff}
+.chain{display:flex;flex-wrap:wrap;gap:4px;align-items:center;font-size:12px;color:#777}
+.chip{border:1.5px solid #ccc;border-radius:999px;padding:0 8px;white-space:nowrap;color:#333;background:#fff}
+.chip.off{text-decoration:line-through;opacity:.6}
+.empty{padding:12px 14px;color:#888;font-size:13px;border-bottom:1px solid var(--line)}
+
+/* ----- graph ----- */
+.graph{flex:1;position:relative;min-width:0;background:#fff;overflow:hidden}
+#graphArea{position:absolute;left:0;top:0;right:0;bottom:0}
+.graph.sweep #graphArea{bottom:236px}
+#smith{position:absolute;left:0;top:0;touch-action:none;cursor:grab;display:block}
+#smith.drag{cursor:grabbing}
+#tip{position:absolute;pointer-events:none;background:#fff;border:1px solid #c8c8c8;border-radius:4px;padding:4px 7px;font-size:12px;white-space:nowrap;display:none;font-variant-numeric:tabular-nums;box-shadow:0 2px 8px rgba(0,0,0,.15);z-index:6}
+#snap{position:absolute;width:22px;height:22px;border:2.5px solid #000;border-radius:50%;pointer-events:none;display:none;transform:translate(-50%,-50%);z-index:5;box-shadow:0 0 0 3px rgba(255,255,255,.85),0 1px 6px rgba(0,0,0,.25);background:rgba(255,255,255,.15)}
+.zstack{position:absolute;right:12px;top:12px;display:flex;flex-direction:column;gap:6px;z-index:4}
+.zstack button{width:34px;height:34px;background:#fff;border:1px solid #c6c6c6;border-radius:5px;box-shadow:0 1px 3px rgba(0,0,0,.14);font-size:19px;cursor:pointer;color:#444;line-height:1}
+.zstack button:hover{background:#f4f4f4}
+.zlabel{position:absolute;right:54px;top:20px;font-size:12px;color:#999;z-index:4}
+.credit{position:absolute;right:12px;bottom:8px;font-size:11.5px;color:#9a9a9a;z-index:4;pointer-events:none;letter-spacing:.02em}
+.hint{position:absolute;left:12px;bottom:8px;font-size:11.5px;color:#aaa;z-index:4;pointer-events:none}
+.readcard{position:absolute;left:12px;top:12px;background:rgba(255,255,255,.95);border:1px solid #cdcdcd;border-radius:6px;box-shadow:0 1px 5px rgba(0,0,0,.12);font-size:12.5px;z-index:4;width:250px}
+.rchead{display:flex;align-items:center;padding:5px 6px 5px 10px;border-bottom:1px solid #e3e3e3;font-weight:600;color:#444}
+.rchead button{border:0;background:none;cursor:pointer;color:#888;font-size:15px;padding:0 4px}
+.readcard.closed #readout{display:none}
+.readcard.closed .rchead{border-bottom:0}
+#readout{padding:6px 10px 8px}
+.rt{display:flex;justify-content:space-between;gap:10px;padding:1.5px 0;font-variant-numeric:tabular-nums}
+.rt span:first-child{color:#888}
+.status{font-weight:600;margin-top:4px}
+.good{color:var(--good)} .bad{color:var(--bad)}
+.plotpanel{position:absolute;left:0;right:0;bottom:0;height:236px;border-top:1px solid #c9c9c9;background:#fff;display:none;padding:6px 12px 4px}
+.graph.sweep .plotpanel{display:block}
+.ptitle{font-size:12.5px;color:#555;display:flex;gap:12px;flex-wrap:wrap}
+.ptitle b{color:#333}
+#plot{width:100%;height:200px;display:block}
+
+/* ----- calculator section ----- */
+.sbtn{margin-left:auto;border:1px solid #c4c4c4;background:#fff;border-radius:4px;padding:0 8px;font-weight:600;color:#555;cursor:pointer;font-size:12px;line-height:20px}
+.sbtn:hover{border-color:var(--accent);color:var(--accent)}
+.mono{font-family:var(--mono)}
+.mexpr{font-family:var(--math);font-size:19px;color:#000;line-height:1.55;overflow-x:auto;overflow-y:hidden;padding:1px 0}
+.mexpr i{font-style:italic}
+.mexpr sup{font-size:.68em;line-height:0}
+.mexpr sub{font-size:.62em;line-height:0}
+.mexpr .si{font-family:var(--ui);font-size:.64em;color:#555;margin-left:1px}
+.mexpr .pl{color:#444}
+.frac{display:inline-flex;flex-direction:column;vertical-align:middle;text-align:center;margin:0 2px;font-size:.9em;line-height:1.25}
+.frac>.nu{border-bottom:1.3px solid #000;padding:0 3px}
+.frac>.de{padding:0 3px}
+.rad{border-top:1.3px solid #000;padding:0 2px;margin-left:1px}
+.cresrow{display:flex;justify-content:flex-end;margin-top:2px}
+.cres{background:#efefef;border-radius:4px;padding:1px 9px;font-family:var(--math);font-size:17px;color:#000;font-variant-numeric:tabular-nums;max-width:100%;overflow-x:auto;white-space:nowrap}
+.cres.click{cursor:pointer}
+.cres.click:hover{background:#e1eaf8}
+.cres .pol{font-family:var(--ui);font-size:12px;color:#777;margin-left:8px}
+.cres.live{background:#f6f6f6;color:#555}
+.crow .gut span:first-child{margin-top:1px}
+.calcinput{width:100%;border:0;border-bottom:1.5px solid #d6d6d6;background:transparent;font-family:var(--mono);font-size:14.5px;padding:3px 2px;outline:none;color:#000}
+.calcinput:focus{border-bottom-color:var(--accent)}
+.crow .calcinput.old{border-bottom-color:transparent;color:#666}
+.crow .calcinput.old:hover{border-bottom-color:#d6d6d6}
+.crow .calcinput.old:focus{border-bottom-color:var(--accent);color:#000}
+.cview{height:80px;overflow:auto;display:flex;flex-direction:column;justify-content:flex-start;cursor:text}
+.cerr{color:var(--bad);font-size:12.5px;margin-top:2px}
+.calchelp{font-size:12.5px;color:#666;padding:8px 12px 8px 56px;border-bottom:1px solid var(--line);background:#fafafa}
+.calchelp[hidden]{display:none}
+.calchelp p{margin:4px 0}
+.calchelp code{color:#000;font-family:var(--mono)}
+.calchelp .ex{display:inline-block;margin:2px 4px 2px 0;padding:1px 6px;border:1px solid #d0d0d0;border-radius:4px;cursor:pointer;color:#000;background:#fff}
+.calchelp .ex:hover{border-color:var(--accent)}
+.calcvars{font-size:12px;color:#888;padding:6px 12px 8px 56px;border-bottom:1px solid var(--line)}
+.calcvars span.v{cursor:pointer;color:#000;border-bottom:1px dotted #999}
+.calcvars a{color:var(--accent);cursor:pointer}
+
+@media (max-width:880px){
+  body{overflow:auto;height:auto}
+  .main{flex-direction:column}
+  .list{width:auto;border-right:0;box-shadow:none;border-bottom:1px solid #b9b9b9}
+  .rows{overflow:visible}
+  .graph{height:82vh;min-height:440px;flex:none}
+}
+</style>
+</head>
+<body>
+<div class="topbar">
+  <span class="title">Smith Chart Matcher</span>
+  <span class="sp"></span>
+  <button id="helpBtn">How to use</button>
+  <div class="helppop" id="helpPop" hidden>
+    <ul>
+      <li>Start at the load (device). Element 1 sits right at the device and the last element sits at the source. Drive the final point onto the orange target ring (Z<sub>s</sub>*).</li>
+      <li>Press <b>+ Add component</b> (in the Matching network section) to add an element. Click an element's colored circle to bypass it, and hover a row for ↑ ↓ × (↑ moves it toward the device).</li>
+      <li>Series elements move along constant-<b>r</b> circles. Shunt elements move along constant-<b>g</b> circles (turn on the admittance grid to see them). The r = 1 and g = 1 circles are drawn darker.</li>
+      <li><b>Drag a component's dot</b> on the chart to change its value. Series parts slide along their constant-r circle and shunt parts along their constant-g circle. The dot gently snaps onto a grid circle of constant g (series parts) or constant r (shunt parts) when it passes within a few pixels, and the snapped circle is shown dashed. Turn snapping off with <b>snap while dragging</b> in Setup, or hold <b>Shift</b> while dragging to skip it once. Zooming in gives finer snap circles.</li>
+      <li><b>Y circles</b> (stubs): tick <b>Y circles</b> on a stub to draw, in its color, the constant-g circle it moves along (through its start point) and the constant-g circle through the target (g = 1 for a 50 Ω source). Other components snap onto them.</li>
+      <li><b>Z₀ circles</b>: tick <b>Z₀ circles</b> on any series line in the Matching network to draw its constant-|Γ| circles (measured against that line's own Z₀), in the line's color. The <b>dashed "through target"</b> circle shows every point that line can rotate onto the target. The <b>dotted "through start"</b> circle is the full path the line can take from where it begins. Other components' dots snap onto them where their own path crosses.</li>
+      <li><b>View frequency</b> (Setup): slide <i>f</i> (or press ▶ to sweep it back and forth) to see where every component's path, the input point and the readout land at that frequency. Component values don't change. Ideal lines keep θ defined at f₀, so their electrical length scales with <i>f</i>. Press <b>= f₀</b> to return to the design frequency. The slider covers the sweep range in sweep mode, or ¼·f₀ to 2·f₀ otherwise.</li>
+      <li>Scroll on the chart to zoom (finer grid lines appear as you zoom in). Drag to pan, and double-click or press ⌂ to reset. Hover to read z and y.</li>
+      <li>Lines and stubs can be <b>microstrip</b> (W and L on the substrate, using the quasi-static Hammerstad–Jensen model, lossless) or <b>ideal</b> (Z₀ and θ at the design frequency).</li>
+    </ul>
+  </div>
+</div>
+
+<div class="main">
+  <aside class="list">
+    <div class="rows">
+      <div class="sect" data-s="setup"><span class="car">▾</span>Setup</div>
+      <div class="sbody">
+        <div class="item"><div class="gut"></div><div class="cont">
+          <div class="cap">design frequency</div>
+          <div class="eq"><span class="math"><i>f</i><sub>0</sub> =</span><input type="number" id="f0" step="any"><span class="unit">GHz</span></div>
+        </div></div>
+        <div class="item" style="--c:var(--accent)"><div class="gut"></div><div class="cont">
+          <div class="cap">view frequency · the chart, readout and dragging are evaluated here (component values stay as designed)</div>
+          <div class="eq"><span class="math"><i>f</i> =</span><input type="number" id="fvN" step="any"><span class="unit">GHz</span>
+            <button class="fvbtn" id="fvPlay" title="Sweep the view frequency across the slider range">▶</button>
+            <button class="fvbtn" id="fvReset" title="Set the view frequency back to f₀">= f₀</button></div>
+          <div class="srow"><span id="fvMin"></span><input type="range" id="fvS"><span id="fvMax"></span></div>
+        </div></div>
+        <div class="item"><div class="gut"></div><div class="cont">
+          <div class="cap">chart reference impedance</div>
+          <div class="eq"><span class="math"><i>Z</i><sub>0</sub> =</span><input type="number" id="z0" step="any" class="sm"><span class="unit">Ω</span></div>
+        </div></div>
+        <div class="item"><div class="gut"></div><div class="cont">
+          <div class="cap">view</div>
+          <div class="opts">
+            <span class="seg"><button id="mSingle">Single frequency</button><button id="mSweep">Sweep</button></span>
+            <label><input type="checkbox" id="showY"> admittance grid</label>
+            <label title="When dragging a component's dot, snap onto constant-r / constant-g grid circles"><input type="checkbox" id="snapOn"> snap while dragging</label>
+            <label title="Show or hide every component's path on the chart. Components stay in the circuit and their dots stay draggable."><input type="checkbox" id="showPaths"> component paths</label>
+          </div>
+          <div class="opts" id="sweepRow">
+            <label>from <input type="number" id="fa" step="any"></label>
+            <label>to <input type="number" id="fb" step="any"> GHz</label>
+            <label>points <input type="number" id="fn" step="1"></label>
+            <label><input type="checkbox" id="showPlot"> |Γ| vs f plot</label>
+            <label><input type="checkbox" id="showSwc"> S11 curve on chart</label>
+          </div>
+        </div></div>
+      </div>
+
+      <div class="sect" data-s="srcload"><span class="car">▾</span>Source &amp; load</div>
+      <div class="sbody">
+        <div class="item"><div class="gut"><span class="icon ring" style="--c:var(--target)"></span></div><div class="cont">
+          <div class="cap">source (target ring = Z<sub>s</sub>*)</div>
+          <div class="eq"><span class="math"><i>Z</i><sub>s</sub> =</span><input type="number" id="sr" step="any" class="sm"><span class="math">+ <i>j</i></span><input type="number" id="sx" step="any" class="sm"><span class="unit">Ω</span></div>
+        </div></div>
+        <div class="item"><div class="gut"><span class="icon sq" style="--c:#000"></span></div><div class="cont">
+          <div class="cap">load (device) · start point</div>
+          <div class="eq"><span class="math"><i>Z</i><sub>L</sub> :</span>
+            <select id="lm">
+              <option value="fixed">Fixed R + jX</option>
+              <option value="seriesRC">Series R – C</option>
+              <option value="parallelRC">Parallel R ‖ C</option>
+              <option value="seriesRL">Series R – L</option>
+            </select>
+          </div>
+          <div class="eq">
+            <span id="fR" class="eq"><span class="math"><i>R</i> =</span><input type="number" id="lr" step="any" class="sm"><span class="unit">Ω</span></span>
+            <span id="fX" class="eq"><span class="math"><i>X</i> =</span><input type="number" id="lx" step="any" class="sm"><span class="unit">Ω</span></span>
+            <span id="fC" class="eq"><span class="math"><i>C</i> =</span><input type="number" id="lc" step="any" class="sm"><span class="unit">fF</span></span>
+            <span id="fL" class="eq"><span class="math"><i>L</i> =</span><input type="number" id="ll" step="any" class="sm"><span class="unit">pH</span></span>
+          </div>
+          <div class="sub" id="loadInfo"></div>
+        </div></div>
+      </div>
+
+      <div class="sect" data-s="net"><span class="car">▾</span>Matching network</div>
+      <div class="sbody">
+        <div class="item" style="min-height:0"><div class="gut"></div><div class="cont"><div class="chain" id="chain"></div></div></div>
+        <div id="els"></div>
+        <div class="addrow">
+          <button class="addbtn" id="addBtn" title="Add a matching component">+ Add component</button>
+          <span class="sp"></span>
+          <button class="lbtn txt" id="clearEls" title="Remove all matching components">Clear network</button>
+          <div class="addmenu" id="addMenu" hidden>
+            <button data-add="seriesL"><span class="k">L</span>Series inductor</button>
+            <button data-add="shuntL"><span class="k">L</span>Shunt inductor</button>
+            <button data-add="seriesC"><span class="k">C</span>Series capacitor</button>
+            <button data-add="shuntC"><span class="k">C</span>Shunt capacitor</button>
+            <hr>
+            <button data-add="tline"><span class="k">ℓ</span>Series line</button>
+            <button data-add="ostub"><span class="k">ℓ</span>Open stub (shunt)</button>
+            <button data-add="sstub"><span class="k">ℓ</span>Shorted stub (shunt)</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="sect" data-s="calc"><span class="car">▾</span>Calculator<button class="sbtn" id="calcHelpBtn" title="Calculator syntax help">?</button></div>
+      <div class="sbody" id="calcSec">
+        <div class="calchelp" id="calcHelp" hidden>
+          <p><b>Numbers:</b> <code>3+j4</code>, <code>3+4j</code>, <code>j47.5</code>, polar <code>50∠-30</code> (or <code>50@-30</code>, degrees), <code>1e-15</code></p>
+          <p><b>Operators:</b> <code>+ - * / ^ ( )</code> and <code>a || b</code> for parallel (binds tighter than + and −). Implicit multiply works: <code>2pi</code>, <code>j(3+4)</code>, <code>jw</code></p>
+          <p><b>Powers:</b> <code>^</code> takes the next number, name, function call or (group), including a leading minus. So <code>10^-15*5</code> is 10<sup>−15</sup>·5, not 10<sup>−75</sup>. The preview under the input draws exponents as superscripts and divisions as fractions so you can check the grouping before pressing Enter. Use parentheses for a longer exponent: <code>10^(-15*5)</code>.</p>
+          <p><b>SI suffixes:</b> <code>f p n u m k M G T</code>, with an optional unit: <code>33.5fF</code>, <code>100pH</code>, <code>94GHz</code></p>
+          <p><b>Variables:</b> <code>zd = 16.5 - j47.5</code>, then use <code>zd</code>. <code>ans</code> is the last result.</p>
+          <p><b>Constants:</b> <code>j pi e c</code>, plus from the page: <code>Z0</code> (chart Z₀), <code>f0</code> (design f in Hz), <code>w</code> (2π·f0)</p>
+          <p><b>Functions:</b> <code>abs arg</code>(°) <code>re im conj inv sqrt exp ln log10 db sin cos tan deg rad polar(m,°) par(a,b,…)</code></p>
+          <p><b>RF helpers:</b> <code>zl(L,f)</code> = jωL, <code>zc(C,f)</code> = 1/(jωC), <code>Lx(X,f)</code> = L for reactance X, <code>Cx(X,f)</code> = C for reactance X, <code>gam(Z[,Z0])</code> = Γ, <code>zg(Γ[,Z0])</code> = Z from Γ, <code>vswr(Γ)</code>, <code>zline(ZL,Zc,θ°)</code> = input Z of a line</p>
+          <p><b>Editing:</b> every row stays editable. Click any row and change it, and its result (plus every row below that uses <code>ans</code> or its variable) updates as you type.</p>
+          <p><b>Keys:</b> Enter = add the new row (or move down) · ↑/↓ = move between rows · Backspace on an empty row deletes it · click a gray result to insert its value</p>
+          <p>Try:
+            <span class="ex mono">16.5 + 1/(jw*33.5f)</span>
+            <span class="ex mono">10^-15*5</span>
+            <span class="ex mono">(16.5 - j47.5) || 200</span>
+            <span class="ex mono">Cx(72, f0)</span>
+            <span class="ex mono">gam(16.5 - j47.5)</span>
+            <span class="ex mono">sqrt(50*200)</span>
+          </p>
+        </div>
+        <div id="calcHist"></div>
+        <div class="calcvars" id="calcVars"></div>
+      </div>
+
+      <div class="sect" data-s="sub"><span class="car">▾</span>Microstrip substrate</div>
+      <div class="sbody">
+        <div class="item"><div class="gut"></div><div class="cont">
+          <div class="cap">substrate</div>
+          <div class="opts" style="margin:0 0 4px">
+            <label>Z₀ model
+              <select id="smodel">
+                <option value="hj">Hammerstad–Jensen (accurate)</option>
+                <option value="simple">Simple: 377·H / ((W + 2H)·√εr)</option>
+              </select>
+            </label>
+          </div>
+          <div class="eq">
+            <span class="math"><i>ε</i><sub>r</sub> =</span><input type="number" id="ser" step="any" class="sm">
+            <span class="math"><i>H</i> =</span><input type="number" id="sh" step="any" class="sm"><span class="unit">µm</span>
+            <span class="math"><i>T</i> =</span><input type="number" id="st" step="any" class="sm"><span class="unit">µm</span>
+          </div>
+          <div class="sub" id="subInfo"></div>
+        </div></div>
+        <div class="item"><div class="gut"></div><div class="cont">
+          <div class="cap">width for a target impedance</div>
+          <div class="eq"><span class="math"><i>W</i>(<i>Z</i><sub>0</sub> =</span><input type="number" id="synZ" step="any" class="sm"><span class="math">Ω) =</span><span class="math" id="synW"></span></div>
+        </div></div>
+      </div>
+    </div>
+  </aside>
+
+  <section class="graph" id="graph">
+    <div id="graphArea">
+      <canvas id="smith"></canvas>
+      <div id="tip"></div>
+      <div id="snap"></div>
+      <div class="readcard" id="readcard">
+        <div class="rchead"><span id="rcTitle">At f<sub>0</sub></span><span class="sp"></span><button id="rcToggle" title="Collapse">–</button></div>
+        <div id="readout"></div>
+      </div>
+      <div class="zstack">
+        <button id="zIn" title="Zoom in">+</button>
+        <button id="zOut" title="Zoom out">−</button>
+        <button id="zReset" title="Reset view">⌂</button>
+      </div>
+      <div class="zlabel" id="zLabel"></div>
+      <div class="hint">scroll to zoom · drag to pan · double-click to reset · hover for z, y</div>
+      <div class="credit">By Andrew Hawley</div>
+    </div>
+    <div class="plotpanel">
+      <div class="ptitle"><b>|Γ| vs frequency (re: source)</b><span id="plotInfo"></span></div>
+      <canvas id="plot"></canvas>
+    </div>
+  </section>
+</div>
+
+<script>
+/* ---------- complex math ---------- */
+const C=(re,im=0)=>({re,im});
+const add=(a,b)=>C(a.re+b.re,a.im+b.im);
+const sub=(a,b)=>C(a.re-b.re,a.im-b.im);
+const mul=(a,b)=>C(a.re*b.re-a.im*b.im,a.re*b.im+a.im*b.re);
+const div=(a,b)=>{const d=b.re*b.re+b.im*b.im;if(d===0)return C(1e15,0);return C((a.re*b.re+a.im*b.im)/d,(a.im*b.re-a.re*b.im)/d);};
+const fin=a=>isFinite(a.re)&&isFinite(a.im);
+const inv=a=>{if(!fin(a))return C(0,0);return div(C(1),a);};
+const conj=a=>C(a.re,-a.im);
+const cabs=a=>Math.hypot(a.re,a.im);
+const rad=d=>d*Math.PI/180;
+const C0=299792458;
+
+/* ---------- state ---------- */
+const META={
+  seriesL:{label:'series inductor',sym:'L',unit:'pH',def:50,max:500},
+  seriesC:{label:'series capacitor',sym:'C',unit:'fF',def:30,max:200},
+  shuntL:{label:'shunt inductor',sym:'L',unit:'pH',def:100,max:500},
+  shuntC:{label:'shunt capacitor',sym:'C',unit:'fF',def:30,max:200},
+  tline:{label:'series line',line:true,w:5},
+  ostub:{label:'open stub (shunt)',line:true,w:50},
+  sstub:{label:'shorted stub (shunt)',line:true,w:50},
+};
+const COLORS=['#c74440','#2d70b3','#388c46','#fa7e19','#000000'];
+const SWEEPCOL='#6042a6';
+const DEFAULT={
+  f0:100,z0:50,mode:'single',fa:1,fb:200,fn:401,showY:true,synZ:50,
+  src:{r:50,x:0},
+  load:{model:'seriesRC',r:16.5,x:-47.5,c:33.5,l:100},
+  sub:{er:2.7,h:6,t:0.25},
+  els:[],collapsed:{},rcClosed:false
+};
+function newEl(type){
+  const m=META[type];
+  if(m.line)return {type,mode:'ms',w:m.w,len:100,lenMax:500,deg:45,degMax:180,z0:50,eeff:1};
+  return {type,val:m.def,max:m.max};
+}
+
+let state;
+try{state=JSON.parse(localStorage.getItem('smithMatcher.v1'))}catch(e){}
+if(!state||!state.load)state=JSON.parse(JSON.stringify(DEFAULT));
+state.sub=state.sub||{...DEFAULT.sub};
+if(!state.sub.model)state.sub.model='hj';
+if(state.synZ==null)state.synZ=50;
+state.collapsed=state.collapsed||{};
+state.lc=state.lc||{on:false,zs:'75'};
+state.els=(state.els||[]).filter(el=>META[el.type]).map(el=>{
+  if(META[el.type].line&&!el.mode)return {type:el.type,mode:'ideal',w:META[el.type].w,len:100,lenMax:500,deg:el.val??45,degMax:el.max??180,z0:el.z0??50,eeff:el.eeff??1};
+  return el;
+});
+const save=()=>{try{localStorage.setItem('smithMatcher.v1',JSON.stringify(state))}catch(e){}};
+
+/* ---------- microstrip (Hammerstad–Jensen, quasi-static) ---------- */
+function msCalc(Wum){
+  const er=Math.max(state.sub.er,1),H=Math.max(state.sub.h,1e-6),T=Math.max(state.sub.t,0),W=Math.max(Wum,1e-6);
+  // simple parallel-plate-with-fringing estimate: Z0 = 377·H / ((W + 2H)·√εr); field taken as fully in the dielectric (εeff = εr), T ignored
+  if(state.sub.model==='simple')return {Zc:377*H/((W+2*H)*Math.sqrt(er)),ee:er};
+  const u=W/H,t=T/H;
+  let u1=u,ur=u;
+  if(t>0){
+    const coth=x=>1/Math.tanh(x);
+    const du1=(t/Math.PI)*Math.log(1+4*Math.E/(t*Math.pow(coth(Math.sqrt(6.517*u)),2)));
+    const dur=0.5*(1+1/Math.cosh(Math.sqrt(er-1)))*du1;
+    u1=u+du1;ur=u+dur;
+  }
+  const Z01=x=>{const f=6+(2*Math.PI-6)*Math.exp(-Math.pow(30.666/x,0.7528));return 376.73/(2*Math.PI)*Math.log(f/x+Math.sqrt(1+4/(x*x)));};
+  const ee=x=>{const a=1+Math.log((Math.pow(x,4)+Math.pow(x/52,2))/(Math.pow(x,4)+0.432))/49+Math.log(1+Math.pow(x/18.1,3))/18.7;
+    const b=0.564*Math.pow((er-0.9)/(er+3),0.053);return (er+1)/2+(er-1)/2*Math.pow(1+10/x,-a*b);};
+  const eer=ee(ur);
+  return {Zc:Z01(ur)/Math.sqrt(eer),ee:eer*Math.pow(Z01(u1)/Z01(ur),2)};
+}
+function synthW(Z){
+  let lo=Math.log(state.sub.h*1e-3),hi=Math.log(state.sub.h*1e3);
+  if(Z>msCalc(Math.exp(lo)).Zc||Z<msCalc(Math.exp(hi)).Zc)return NaN;
+  for(let i=0;i<80;i++){const m=(lo+hi)/2;if(msCalc(Math.exp(m)).Zc>Z)lo=m;else hi=m;}
+  return Math.exp((lo+hi)/2);
+}
+
+/* ---------- circuit model ---------- */
+const F0=()=>Math.max(state.f0,1e-6)*1e9;          // design frequency (defines ideal-line θ)
+const FV=()=>(state.fv>0?state.fv:Math.max(state.f0,1e-6))*1e9; // view frequency (chart, readout, dragging)
+function loadZ(f){
+  const L=state.load,w=2*Math.PI*f;
+  switch(L.model){
+    case 'fixed':return C(L.r,L.x);
+    case 'seriesRC':return C(L.r,-1/(w*Math.max(L.c,1e-9)*1e-15));
+    case 'parallelRC':return inv(C(1/Math.max(L.r,1e-12),w*L.c*1e-15));
+    case 'seriesRL':return C(L.r,w*L.l*1e-12);
+  }
+}
+function lineParams(el,f){
+  if(el.mode==='ms'){const {Zc,ee}=msCalc(el.w);return {Zc,ee,th:2*Math.PI*f*el.len*1e-6*Math.sqrt(ee)/C0};}
+  return {Zc:el.z0,ee:el.eeff||1,th:rad(el.deg)*f/F0()};
+}
+const shunt=(Z,B)=>inv(add(inv(Z),C(0,B)));
+function stubB(el,f){
+  const {Zc,th}=lineParams(el,f);
+  if(el.type==='ostub')return Math.tan(th)/Zc;
+  return -1/(Zc*Math.tan(Math.max(th,1e-7)));
+}
+function apply(el,Z,f,s=1){
+  const w=2*Math.PI*f;
+  switch(el.type){
+    case 'seriesL':return add(Z,C(0,s*w*el.val*1e-12));
+    case 'seriesC':return add(Z,C(0,-s/(w*Math.max(el.val,1e-6)*1e-15)));
+    case 'shuntL':return shunt(Z,-s/(w*Math.max(el.val,1e-6)*1e-12));
+    case 'shuntC':return shunt(Z,s*w*el.val*1e-15);
+    case 'ostub':case 'sstub':return shunt(Z,s*stubB(el,f));
+    case 'tline':{
+      const p=lineParams(el,f),th=p.th*s,Zc=C(p.Zc);
+      const G=fin(Z)?div(sub(Z,Zc),add(Z,Zc)):C(1,0);
+      const Gr=mul(G,C(Math.cos(-2*th),Math.sin(-2*th)));
+      const d=sub(C(1),Gr);
+      if(cabs(d)<1e-14)return C(1e15,0);
+      return mul(Zc,div(add(C(1),Gr),d));
+    }
+  }
+}
+const active=()=>state.els.filter(e=>!e.off);
+const zin=f=>active().reduce((Z,el)=>apply(el,Z,f),loadZ(f));
+function gamma(Z,Zref=state.z0){if(!fin(Z)||Math.abs(Z.re)>1e13)return C(1,0);return div(sub(Z,C(Zref)),add(Z,C(Zref)));}
+function gammaSrc(Z){const Zs=C(state.src.r,state.src.x);if(!fin(Z)||Math.abs(Z.re)>1e13)return C(1,0);return div(sub(Z,conj(Zs)),add(Z,Zs));}
+const dB=g=>20*Math.log10(Math.max(cabs(g),1e-6));
+
+/* ---------- formatting ---------- */
+const fx=(n,d=2)=>(!isFinite(n)?'∞':Math.abs(n)>=1e5?n.toExponential(2):n.toFixed(d));
+const cplx=(z,d=3,u='')=>{if(!fin(z)||Math.abs(z.re)>1e12)return '∞';return `${fx(z.re,d)} ${z.im<0?'−':'+'} j${fx(Math.abs(z.im),d)}${u}`;};
+const css=v=>getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const nice=v=>String(+v.toPrecision(4));
+
+/* ---------- UI wiring ---------- */
+const $=s=>document.querySelector(s);
+function bindNum(id,set){const e=$(id);e.addEventListener('input',()=>{const v=parseFloat(e.value);if(isFinite(v)){set(v);save();draw();}});}
+function syncInputs(){
+  $('#f0').value=state.f0;$('#z0').value=state.z0;$('#fa').value=state.fa;$('#fb').value=state.fb;$('#fn').value=state.fn;
+  $('#sr').value=state.src.r;$('#sx').value=state.src.x;
+  $('#lm').value=state.load.model;$('#lr').value=state.load.r;$('#lx').value=state.load.x;$('#lc').value=state.load.c;$('#ll').value=state.load.l;
+  $('#ser').value=state.sub.er;$('#sh').value=state.sub.h;$('#st').value=state.sub.t;$('#synZ').value=state.synZ;
+  $('#smodel').value=state.sub.model;
+  $('#showY').checked=state.showY;
+  $('#snapOn').checked=state.snap!==false;
+  $('#showPaths').checked=state.showPaths!==false;$('#showPlot').checked=state.showPlot!==false;$('#showSwc').checked=state.showSwc!==false;  document.querySelectorAll('.sect').forEach(s=>s.classList.toggle('closed',!!state.collapsed[s.dataset.s]));
+  $('#readcard').classList.toggle('closed',!!state.rcClosed);$('#rcToggle').textContent=state.rcClosed?'+':'–';
+  loadFields();modeUI();
+}
+bindNum('#f0',v=>{if(v>0)state.f0=v;});
+/* view-frequency slider */
+function fvRange(){
+  if(state.mode==='sweep'){const a=Math.max(state.fa,0.01),b=Math.max(state.fb,a*1.001);return [a,b];}
+  return [state.f0*0.25,state.f0*2];
+}
+function fvUI(){
+  const [a,b]=fvRange(),fv=FV()/1e9,s=$('#fvS');
+  s.min=a;s.max=b;s.step='any';s.value=Math.min(Math.max(fv,a),b);
+  if(document.activeElement!==$('#fvN'))$('#fvN').value=+fv.toPrecision(5);
+  $('#fvMin').textContent=+a.toPrecision(4);$('#fvMax').textContent=+b.toPrecision(4)+' GHz';
+  const off=state.fv>0&&Math.abs(state.fv-state.f0)>1e-9;
+  $('#rcTitle').innerHTML=off?`At f = ${+fv.toPrecision(5)} GHz`:'At f<sub>0</sub>';
+  $('#readcard').classList.toggle('offf0',off);
+}
+function setFv(v){state.fv=(v>0&&Math.abs(v-state.f0)>1e-9)?v:null;save();draw();}
+$('#fvS').addEventListener('input',e=>{stopPlay();setFv(+e.target.value);});
+bindNum('#fvN',v=>{if(v>0)state.fv=Math.abs(v-state.f0)>1e-9?v:null;});
+$('#fvReset').onclick=()=>{stopPlay();setFv(null);};
+let playRaf=null,playT0=0,playF0=0;
+function stopPlay(){if(playRaf){cancelAnimationFrame(playRaf);playRaf=null;$('#fvPlay').textContent='▶';$('#fvPlay').classList.remove('on');save();}}
+$('#fvPlay').onclick=()=>{
+  if(playRaf){stopPlay();return;}
+  const [a,b]=fvRange();playF0=Math.min(Math.max(FV()/1e9,a),b);playT0=performance.now();
+  $('#fvPlay').textContent='❚❚';$('#fvPlay').classList.add('on');
+  const T=6000; // ms to go from one end to the other
+  const step=now=>{
+    const [a,b]=fvRange(),span=b-a;
+    // bounce between a and b, starting from the current frequency
+    let u=((playF0-a)/span+(now-playT0)/T)%2;const frac=u<=1?u:2-u;
+    state.fv=a+span*frac;draw();playRaf=requestAnimationFrame(step);
+  };
+  playRaf=requestAnimationFrame(step);
+};
+bindNum('#z0',v=>{if(v>0)state.z0=v;});
+bindNum('#fa',v=>state.fa=Math.max(v,0.01));
+bindNum('#fb',v=>state.fb=v);
+bindNum('#fn',v=>state.fn=Math.min(Math.max(Math.round(v),11),4001));
+bindNum('#sr',v=>state.src.r=v);
+bindNum('#sx',v=>state.src.x=v);
+bindNum('#lr',v=>state.load.r=v);
+bindNum('#lx',v=>state.load.x=v);
+bindNum('#lc',v=>state.load.c=v);
+bindNum('#ll',v=>state.load.l=v);
+bindNum('#ser',v=>{if(v>=1)state.sub.er=v;});
+bindNum('#sh',v=>{if(v>0)state.sub.h=v;});
+bindNum('#st',v=>{if(v>=0)state.sub.t=v;});
+bindNum('#synZ',v=>{if(v>0)state.synZ=v;});
+$('#lm').addEventListener('change',e=>{state.load.model=e.target.value;loadFields();save();draw();});
+$('#smodel').addEventListener('change',e=>{state.sub.model=e.target.value;save();draw();});
+$('#showY').addEventListener('change',e=>{state.showY=e.target.checked;save();draw();});
+$('#snapOn').addEventListener('change',e=>{state.snap=e.target.checked;save();});
+$('#showPaths').addEventListener('change',e=>{state.showPaths=e.target.checked;save();draw();});
+$('#showPlot').addEventListener('change',e=>{state.showPlot=e.target.checked;modeUI();save();draw();});
+$('#showSwc').addEventListener('change',e=>{state.showSwc=e.target.checked;save();draw();});
+// Z0 circles for series lines that have "Z₀ circles" ticked: constant-|Γ| circles measured against
+// that line's own Z0, drawn on the chart. For each such line: the circle through the target Zs*
+// (any point on it can be rotated onto the target by that line) and the circle through the line's
+// start point (the full path that line can take). Drawn in the line's own colour.
+function lineCircles(){
+  const out=[],f=FV(),tgt=conj(C(state.src.r,state.src.x));
+  const rhoOf=(Z,Zl)=>cabs(div(sub(Z,C(Zl)),add(Z,C(Zl))));
+  const mk=(Zl,rho,tag,i)=>{
+    if(!(rho>1e-6&&rho<0.9999))return;
+    const a=gamma(C(Zl*(1+rho)/(1-rho))).re,b=gamma(C(Zl*(1-rho)/(1+rho))).re;
+    out.push({Zl,rho,c:(a+b)/2,R:Math.abs(a-b)/2,tag,i,col:COLORS[i%COLORS.length],name:`${state.els[i].type==='tline'?'line':'stub'} ${i+1}`});
+  };
+  let Z=loadZ(f);
+  state.els.forEach((el,i)=>{
+    if(el.off)return;
+    if(el.type==='tline'&&el.lc){const Zl=lineParams(el,f).Zc;mk(Zl,rhoOf(tgt,Zl),'target',i);mk(Zl,rhoOf(Z,Zl),'start',i);}
+    else if(META[el.type].line&&el.lc){
+      // stubs are shunt: show constant-g circles — the one the stub moves along (through its start point) and the one through the target
+      const gc=(Zq,tag)=>{const g=inv(Zq).re*state.z0;if(!(g>1e-6))return;
+        out.push({g,c:-g/(1+g),R:1/(1+g),tag,i,col:COLORS[i%COLORS.length],name:`stub ${i+1}`});};
+      gc(Z,'start');
+      const gT=inv(tgt).re*state.z0,gS=inv(Z).re*state.z0;
+      if(Math.abs(gT-gS)>1e-3)gc(tgt,'target');
+    }
+    Z=apply(el,Z,f);
+  });
+  return out;
+}
+function loadFields(){
+  const m=state.load.model;
+  $('#fX').style.display=m==='fixed'?'':'none';
+  $('#fC').style.display=(m==='seriesRC'||m==='parallelRC')?'':'none';
+  $('#fL').style.display=m==='seriesRL'?'':'none';
+}
+function modeUI(){
+  const sw=state.mode==='sweep';
+  $('#mSingle').classList.toggle('on',!sw);$('#mSweep').classList.toggle('on',sw);
+  $('#sweepRow').style.display=sw?'':'none';$('#graph').classList.toggle('sweep',sw&&state.showPlot!==false);
+}
+$('#mSingle').onclick=()=>{state.mode='single';modeUI();save();draw();};
+$('#mSweep').onclick=()=>{state.mode='sweep';modeUI();save();draw();};
+document.querySelectorAll('.sect').forEach(s=>s.onclick=()=>{const k=s.dataset.s;state.collapsed[k]=!state.collapsed[k];s.classList.toggle('closed',state.collapsed[k]);save();});
+$('#rcToggle').onclick=()=>{state.rcClosed=!state.rcClosed;$('#readcard').classList.toggle('closed',state.rcClosed);$('#rcToggle').textContent=state.rcClosed?'+':'–';save();};
+const addMenu=$('#addMenu');
+$('#addBtn').onclick=e=>{e.stopPropagation();addMenu.hidden=!addMenu.hidden;};
+$('#helpBtn').onclick=e=>{e.stopPropagation();$('#helpPop').hidden=!$('#helpPop').hidden;};
+document.addEventListener('click',e=>{
+  if(!e.target.closest('#addMenu'))addMenu.hidden=true;
+  if(!e.target.closest('#helpPop')&&e.target.id!=='helpBtn')$('#helpPop').hidden=true;
+});
+addMenu.querySelectorAll('[data-add]').forEach(b=>b.onclick=()=>{
+  state.els.push(newEl(b.dataset.add));addMenu.hidden=true;
+  state.collapsed.net=false;document.querySelector('.sect[data-s=net]').classList.remove('closed');
+  save();renderEls();draw();
+  const rows=document.querySelectorAll('#els .item');const last=rows[rows.length-1];if(last){last.scrollIntoView({block:'nearest'});last.querySelector('input[data-k=val]').focus();}
+});
+$('#clearEls').onclick=()=>{state.els=[];save();renderEls();draw();};
+
+const EYE='<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg>';
+const EYEOFF='<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"/><path d="M3 3l18 18"/></svg>';
+const keysOf=el=>META[el.type].line?(el.mode==='ms'?['len','lenMax','µm']:['deg','degMax','°']):['val','max',META[el.type].unit];
+function symOf(el,i){
+  const m=META[el.type];
+  if(!m.line)return `<i>${m.sym}</i><sub>${i+1}</sub>`;
+  return el.mode==='ms'?`<i>ℓ</i><sub>${i+1}</sub>`:`<i>θ</i><sub>${i+1}</sub>`;
+}
+function renderEls(){
+  const box=$('#els');box.innerHTML='';
+  if(!state.els.length)box.innerHTML='<div class="empty">Press <b>+ Add component</b> below. Component 1 sits next to the device.</div>';
+  state.els.forEach((el,i)=>{
+    const m=META[el.type],col=COLORS[i%COLORS.length],[vk,mk,unit]=keysOf(el);
+    const d=document.createElement('div');d.className='item';d.style.setProperty('--c',col);
+    const lineOpts=!m.line?'':`<div class="opts">
+        <select data-k="mode"><option value="ms"${el.mode==='ms'?' selected':''}>Microstrip (W, L)</option><option value="ideal"${el.mode!=='ms'?' selected':''}>Ideal (Z₀, θ)</option></select>
+        ${el.mode==='ms'
+          ?`<label>W <input type="number" step="any" value="${el.w}" data-k="w"> µm</label>`
+          :`<label>Z₀ <input type="number" step="any" value="${el.z0}" data-k="z0"> Ω</label><label>ε<sub>eff</sub> <input type="number" step="any" value="${el.eeff}" data-k="eeff"></label>`}
+        ${el.type==='tline'
+          ?`<label title="Draw constant-|Γ| circles measured against this line's Z₀: through the target and through its start point. Dragged points snap onto them."><input type="checkbox" data-k="lc"${el.lc?' checked':''}> Z₀ circles</label>`
+          :`<label title="Draw constant-conductance circles: the one this stub moves along (through its start point) and the one through the target. Dragged points snap onto them."><input type="checkbox" data-k="lc"${el.lc?' checked':''}> Y circles</label>`}
+      </div>`;
+    d.innerHTML=`
+      <div class="gut"><span>${i+1}</span><span class="icon btn${el.off?' off':''}" data-a="tog" title="${el.off?'Enable this element':'Bypass this element'}"></span></div>
+      <div class="cont">
+        <div class="cap">${m.label}${el.off?' · bypassed':''}${el.hide?' · path hidden':''}</div>
+        <div class="eq"><span class="math">${symOf(el,i)} =</span><input type="number" step="any" value="${el[vk]}" data-k="val"><span class="unit">${unit}</span></div>
+        ${lineOpts}
+        <div class="srow"><span>0</span><input type="range" min="0" max="${el[mk]}" step="${el[mk]/2000}" value="${el[vk]}" data-k="slider"><input type="number" step="any" value="${el[mk]}" data-k="max" title="Slider maximum"></div>
+        <div class="sub" data-info></div>
+      </div>
+      <div class="rowbtns"><button data-a="hide" class="${el.hide?'on':''}" title="${el.hide?'Show this path on the chart':'Hide this path on the chart (stays in the circuit)'}">${el.hide?EYEOFF:EYE}</button><button data-a="up" title="Move toward device">↑</button><button data-a="down" title="Move toward source">↓</button><button data-a="del" title="Delete">×</button></div>`;
+    const sl=d.querySelector('[data-k=slider]'),nv=d.querySelector('[data-k=val]');
+    d.addEventListener('input',e=>{
+      const k=e.target.dataset.k;if(!k||k==='mode')return;
+      const v=parseFloat(e.target.value);if(!isFinite(v))return;
+      if(k==='slider'){el[vk]=v;nv.value=+v.toFixed(4);}
+      else if(k==='val'){el[vk]=Math.max(v,0);if(el[vk]>el[mk]){el[mk]=+(el[vk]*1.5).toPrecision(3);d.querySelector('[data-k=max]').value=el[mk];sl.max=el[mk];sl.step=el[mk]/2000;}sl.value=el[vk];}
+      else if(k==='max'){if(v>0){el[mk]=v;sl.max=v;sl.step=v/2000;sl.value=el[vk];}}
+      else if(k==='z0'||k==='w'){if(v>0)el[k]=v;}
+      else if(k==='eeff'){if(v>=1)el.eeff=v;}
+      save();draw();
+    });
+    d.addEventListener('change',e=>{
+      if(e.target.dataset.k==='lc'){el.lc=e.target.checked;save();draw();return;}
+      if(e.target.dataset.k!=='mode')return;
+      const p=lineParams(el,F0());
+      if(e.target.value==='ideal'){el.z0=+p.Zc.toPrecision(4);el.eeff=+p.ee.toPrecision(4);el.deg=+(p.th*180/Math.PI).toPrecision(4);el.degMax=Math.max(el.degMax,Math.ceil(el.deg*1.5));}
+      else{const ee=msCalc(el.w).ee;el.len=+(p.th/(2*Math.PI*F0())*C0/Math.sqrt(ee)*1e6).toPrecision(4);el.lenMax=Math.max(el.lenMax,Math.ceil(el.len*1.5));}
+      el.mode=e.target.value;save();renderEls();draw();
+    });
+    d.addEventListener('click',e=>{
+      const b=e.target.closest('[data-a]'),a=b&&b.dataset.a;if(!a)return;
+      if(a==='tog')el.off=!el.off;
+      if(a==='hide')el.hide=!el.hide;
+      if(a==='del')state.els.splice(i,1);
+      if(a==='up'&&i>0)[state.els[i-1],state.els[i]]=[state.els[i],state.els[i-1]];
+      if(a==='down'&&i<state.els.length-1)[state.els[i+1],state.els[i]]=[state.els[i],state.els[i+1]];
+      save();renderEls();draw();
+    });
+    box.appendChild(d);
+  });
+}
+
+/* ---------- element info ---------- */
+function elInfo(el){
+  const f=FV(),w=2*Math.PI*f,z0=state.z0;
+  const sg=v=>v<0?'−':'+';
+  const sx=X=>`jX = ${sg(X)}j${fx(Math.abs(X))} Ω  (x = ${sg(X)}${fx(Math.abs(X)/z0,3)})`;
+  const sb=B=>`jB = ${sg(B)}j${fx(Math.abs(B)*1e3)} mS  (b = ${sg(B)}${fx(Math.abs(B)*z0,3)})`;
+  // a component's own reactance X and susceptance B = −1/X; list the one it acts through first
+  const both=(X,shunt)=>shunt?`${sb(-1/X)}\n${sx(X)}`:`${sx(X)}\n${sb(-1/X)}`;
+  switch(el.type){
+    case 'seriesL':return both(w*el.val*1e-12,false);
+    case 'seriesC':return both(-1/(w*Math.max(el.val,1e-6)*1e-15),false);
+    case 'shuntL':return both(w*Math.max(el.val,1e-6)*1e-12,true);
+    case 'shuntC':return both(-1/(w*Math.max(el.val,1e-6)*1e-15),true);
+  }
+  const p=lineParams(el,f),deg=p.th*180/Math.PI,lg=C0/(f*Math.sqrt(p.ee))*1e6,tau=p.th/w;
+  let s=`Z₀ ${fx(p.Zc,1)} Ω · εeff ${fx(p.ee,3)} · θ ${fx(deg,1)}° · `;
+  s+=el.mode==='ms'?`λg ${fx(lg,0)} µm`:`ℓ ${fx(deg/360*lg,1)} µm`;
+  if(el.type==='tline'){
+    // exact π-equivalent of the line at f0: series Zc·sinθ, each shunt arm tan(θ/2)/Zc
+    s+=` · ≈ L ${fx(p.Zc*tau*1e12,1)} pH, C ${fx(tau/p.Zc*1e15,1)} fF`;
+    s+=`\nπ-model series: ${sx(p.Zc*Math.sin(p.th))}\nπ-model shunt (each end): ${sb(Math.tan(p.th/2)/p.Zc)}`;
+  }else{
+    const B=stubB(el,f);
+    s+=`\n${sb(B)}\n${sx(-1/B)}`;
+  }
+  return s;
+}
+
+/* ---------- Smith chart grid levels (finer lines fade in as you zoom) ---------- */
+const rng=(a,b,s)=>{const o=[];for(let k=0;a+k*s<=b+1e-9;k++)o.push(+(a+k*s).toFixed(4));return o;};
+const LEVELS=(()=>{
+  const raw=[
+    [0.2,0.5,1,2,5],
+    [0.1,0.3,0.4,0.6,0.7,0.8,0.9,1.5,3,4,10,20],
+    [...rng(0.05,1,0.05),...rng(1.1,2,0.1),...rng(2.2,5,0.2),6,7,8,9,15,30,50],
+    [...rng(0.01,0.5,0.01),...rng(0.52,1,0.02),...rng(1.05,2,0.05),...rng(2.1,5,0.1),...rng(5.5,10,0.5),...rng(12,20,2),25,40,100],
+    [...rng(0.002,0.2,0.002),...rng(0.205,1,0.005),...rng(1.01,2,0.01),...rng(2.02,5,0.02),...rng(5.1,10,0.1),...rng(11,20,1)],
+  ];
+  const seen=new Set();
+  return raw.map(l=>l.filter(v=>{const k=v.toFixed(4);if(seen.has(k))return false;seen.add(k);return true;}));
+})();
+const TH=[1,1.5,3.5,9,24];
+let view={zoom:1,cu:0,cv:0};
+const lvAlpha=k=>k===0?1:Math.max(0,Math.min(1,Math.log2(view.zoom/TH[k])));
+
+/* ---------- drawing ---------- */
+let geom=null,sweepData=null,snapPts=[],dragSnap=null;
+function drawChart(){
+  const cv=$('#smith'),wrap=$('#graphArea'),dpr=window.devicePixelRatio||1;
+  const W=Math.max(200,wrap.clientWidth),H=Math.max(200,wrap.clientHeight);
+  cv.style.width=W+'px';cv.style.height=H+'px';cv.width=W*dpr;cv.height=H*dpr;
+  const ctx=cv.getContext('2d');ctx.setTransform(dpr,0,0,dpr,0,0);
+  const pad=36,R=Math.max(60,Math.min(W,H)/2-pad),cx=W/2,cy=H/2,S=R*view.zoom;
+  geom={cx,cy,R,S,W,H};
+  const P=g=>[cx+(g.re-view.cu)*S,cy-(g.im-view.cv)*S];
+  const vis=(x,y,r)=>{const nx=Math.max(0,Math.min(W,x)),ny=Math.max(0,Math.min(H,y));
+    const dn=Math.hypot(x-nx,y-ny),df=Math.max(Math.hypot(x,y),Math.hypot(x-W,y),Math.hypot(x,y-H),Math.hypot(x-W,y-H));
+    return dn<=r&&r<=df;};
+  const circ=(u,v,r)=>{const [x,y]=P(C(u,v)),rp=r*S;if(rp>2e7||!vis(x,y,rp))return;ctx.moveTo(x+rp,y);ctx.arc(x,y,rp,0,2*Math.PI);};
+  const [ox,oy]=P(C(0,0));
+  ctx.clearRect(0,0,W,H);
+  ctx.fillStyle=css('--chartbg');ctx.beginPath();ctx.arc(ox,oy,S,0,2*Math.PI);ctx.fill();
+  ctx.save();ctx.beginPath();ctx.arc(ox,oy,S,0,2*Math.PI);ctx.clip();
+  const fam=(vals,kind)=>{ctx.beginPath();vals.forEach(v=>{
+    if(kind==='r')circ(v/(1+v),0,1/(1+v));
+    else if(kind==='x'){circ(1,1/v,1/v);circ(1,-1/v,1/v);}
+    else if(kind==='g')circ(-v/(1+v),0,1/(1+v));
+    else {circ(-1,1/v,1/v);circ(-1,-1/v,1/v);}
+  });ctx.stroke();};
+  LEVELS.forEach((vals,k)=>{
+    const a=lvAlpha(k);if(a<=0.02)return;
+    ctx.lineWidth=k===0?1.1:0.9;
+    if(state.showY){ctx.globalAlpha=a;ctx.strokeStyle=css('--gridY');fam(vals,'g');fam(vals,'b');}
+    ctx.globalAlpha=a;ctx.strokeStyle=k===0?css('--gridMajor'):css('--grid');fam(vals.filter(v=>v!==1),'r');fam(vals,'x');
+  });
+  ctx.globalAlpha=1;
+  if(state.showY){ctx.strokeStyle='#d99b93';ctx.lineWidth=1.8;ctx.beginPath();circ(-0.5,0,0.5);ctx.stroke();}
+  ctx.strokeStyle=css('--grid1');ctx.lineWidth=1.6;ctx.beginPath();circ(0.5,0,0.5);ctx.stroke();
+  ctx.lineWidth=1.4;ctx.strokeStyle='#000';ctx.beginPath();ctx.moveTo(...P(C(-1,0)));ctx.lineTo(...P(C(1,0)));ctx.stroke();
+  const LC=lineCircles();
+  if(LC.length){ // constant-|Γ| circles of the chosen line impedance(s)
+    ctx.save();
+    LC.forEach(cc=>{ctx.strokeStyle=cc.col;ctx.globalAlpha=cc.tag==='target'?0.9:0.55;ctx.lineWidth=cc.tag==='target'?2:1.6;ctx.setLineDash(cc.tag==='target'?[9,5]:[3,4]);ctx.beginPath();circ(cc.c,0,cc.R);ctx.stroke();});
+    ctx.restore();
+  }
+  if(dragSnap){ // highlight the circle (or point) a dragged point is snapped to
+    const t=dragSnap.t;ctx.save();ctx.strokeStyle=css('--accent');ctx.lineWidth=2.2;ctx.setLineDash([7,4]);ctx.beginPath();
+    if(dragSnap.kind==='pt'){const [px,py]=P(gamma(dragSnap.Z));ctx.arc(px,py,13,0,2*Math.PI);}
+    else if(dragSnap.kind==='zl')circ(dragSnap.c,0,dragSnap.R);
+    else if(dragSnap.kind==='r')circ(t/(1+t),0,1/(1+t));else circ(-t/(1+t),0,1/(1+t));
+    ctx.stroke();ctx.restore();
+  }
+  ctx.restore();
+  ctx.strokeStyle='#000';ctx.lineWidth=1.8;ctx.beginPath();ctx.arc(ox,oy,S,0,2*Math.PI);ctx.stroke();
+  if(LC.length){ // label each line circle at its top
+    ctx.save();ctx.font='600 12px "Helvetica Neue",Helvetica,Arial,sans-serif';ctx.textAlign='center';ctx.textBaseline='bottom';
+    LC.forEach(cc=>{ // "through target" label above its circle, "through start" label below its circle
+      const top=cc.tag==='target',[x,y]=P(C(cc.c,top?cc.R:-cc.R));if(x<0||x>W||y<12||y>H-12)return;
+      const txt=cc.g!=null?`${cc.name} · g = ${nice(+cc.g.toPrecision(3))} ${cc.tag==='start'?'(its path)':'(through target)'}`
+        :`${cc.name} (${nice(+cc.Zl.toPrecision(3))} Ω) · through ${cc.tag}`,ty=top?y-3:y+3;ctx.textBaseline=top?'bottom':'top';
+      ctx.lineWidth=3.5;ctx.strokeStyle='#fff';ctx.strokeText(txt,x,ty);ctx.fillStyle=cc.col;ctx.fillText(txt,x,ty);});
+    ctx.restore();
+  }
+
+  // labels along the constant-x / constant-r curves through the view centre
+  ctx.font='12px "Helvetica Neue",Helvetica,Arial,sans-serif';
+  const placed=[];
+  const label=(txt,x,y,align)=>{
+    if(x<4||x>W-4||y<8||y>H-8)return;
+    if(placed.some(p=>Math.abs(p[0]-x)<30&&Math.abs(p[1]-y)<14))return;
+    placed.push([x,y]);ctx.textAlign=align;ctx.textBaseline='middle';
+    ctx.lineWidth=3.5;ctx.strokeStyle='#fff';ctx.strokeText(txt,x,y);ctx.fillStyle='#555';ctx.fillText(txt,x,y);
+  };
+  let Lvis=0;LEVELS.forEach((_,k)=>{if(lvAlpha(k)>0.5)Lvis=k;});
+  const labVals=LEVELS.slice(0,Math.max(1,Lvis)).flat();
+  let gc=C(view.cu,view.cv);const gm=cabs(gc);if(gm>0.98)gc=C(gc.re*0.98/gm,gc.im*0.98/gm);
+  const zc=div(add(C(1),gc),sub(C(1),gc));
+  const xc=view.zoom<1.6?0:zc.im,rc=Math.max(zc.re,0);
+  [0,...labVals].forEach(r=>{const g=gamma(C(r,xc),1);if(cabs(g)>1)return;const [x,y]=P(g);label(nice(r),x,y-9,'center');});
+  if(view.zoom<1.6){
+    [0.2,0.5,1,2,5].forEach(x=>[1,-1].forEach(sg=>{const g=gamma(C(0,sg*x),1);const [px,py]=P(C(g.re*1.085,g.im*1.085));label((sg>0?'+j':'−j')+x,px,py,'center');}));
+    label('∞',...P(C(1.05,0)),'center');
+  }else{
+    labVals.forEach(x=>[1,-1].forEach(sg=>{const g=gamma(C(rc,sg*x),1);if(cabs(g)>1)return;const [px,py]=P(g);label((sg>0?'+j':'−j')+nice(x),px+5,py,'left');}));
+  }
+
+  const f=FV();
+  sweepData=null;
+  if(state.mode==='sweep'){
+    const fa=state.fa*1e9,fb=Math.max(state.fb*1e9,fa*1.0001),n=state.fn;
+    const fs=[],zs=[];
+    for(let k=0;k<n;k++){const ff=fa+(fb-fa)*k/(n-1);fs.push(ff);zs.push(zin(ff));}
+    sweepData={fs,zs};
+    if(state.showSwc!==false){
+      ctx.save();ctx.globalAlpha=.6;ctx.strokeStyle=SWEEPCOL;ctx.lineWidth=2.2;ctx.beginPath();
+      zs.forEach((z,k)=>{const [x,y]=P(gamma(z));k?ctx.lineTo(x,y):ctx.moveTo(x,y);});ctx.stroke();ctx.restore();
+    }
+  }
+  // element trajectories at f0
+  let Z=loadZ(f);const start=Z;
+  snapPts=[];
+  {const [x,y]=P(gamma(start));snapPts.push({x,y,Z:start,label:'Load (start)',col:'#000'});}
+  {const T=conj(C(state.src.r,state.src.x)),[x,y]=P(gamma(T));snapPts.push({x,y,Z:T,label:'Target Z<sub>s</sub>*',col:css('--target')});}
+  state.els.forEach((el,i)=>{
+    if(el.off)return;
+    const col=COLORS[i%COLORS.length];
+    if(state.showPaths!==false&&!el.hide){ // hidden paths are only not drawn; the component stays in the circuit
+      ctx.strokeStyle=col;ctx.lineWidth=3;ctx.lineCap='round';ctx.beginPath();
+      const N=160;
+      for(let k=0;k<=N;k++){const [x,y]=P(gamma(apply(el,Z,f,k/N)));k?ctx.lineTo(x,y):ctx.moveTo(x,y);}
+      ctx.stroke();
+    }
+    const Zp=Z;Z=apply(el,Z,f);
+    const [x,y]=P(gamma(Z));ctx.fillStyle=col;ctx.beginPath();ctx.arc(x,y,4.5,0,2*Math.PI);ctx.fill();
+    if(dragEl&&dragEl.i===i){ctx.strokeStyle=col;ctx.lineWidth=2.5;ctx.beginPath();ctx.arc(x,y,9,0,2*Math.PI);ctx.stroke();}
+    snapPts.push({x,y,Z,Zp,i,label:`After ${i+1} · ${META[el.type].label}`,col});
+  });
+  if(active().length)snapPts[snapPts.length-1].label+=' <span style="color:#888;font-weight:400">(input)</span>';
+  // markers
+  ctx.font='600 13px "Helvetica Neue",Helvetica,Arial,sans-serif';ctx.textAlign='left';ctx.textBaseline='middle';
+  const [lx,ly]=P(gamma(start));ctx.fillStyle='#000';ctx.fillRect(lx-5,ly-5,10,10);
+  ctx.lineWidth=3.5;ctx.strokeStyle='#fff';ctx.strokeText('Load',lx+9,ly);ctx.fillText('Load',lx+9,ly);
+  const T=conj(C(state.src.r,state.src.x));const [tx,ty]=P(gamma(T));
+  ctx.strokeStyle=css('--target');ctx.lineWidth=3;ctx.beginPath();ctx.arc(tx,ty,8.5,0,2*Math.PI);ctx.stroke();
+  if(active().length){
+    const [ix,iy]=P(gamma(Z));ctx.fillStyle=css('--blue');ctx.strokeStyle='#fff';ctx.lineWidth=2;
+    ctx.beginPath();ctx.arc(ix,iy,6,0,2*Math.PI);ctx.fill();ctx.stroke();
+    ctx.lineWidth=3.5;ctx.strokeText('In',ix+9,iy-11);ctx.fillStyle=css('--blue');ctx.fillText('In',ix+9,iy-11);
+  }
+  $('#zLabel').textContent=view.zoom>1.01?`×${view.zoom<10?view.zoom.toFixed(1):Math.round(view.zoom)}`:'';
+  return Z;
+}
+
+function drawPlot(){
+  if(state.mode!=='sweep'||!sweepData||state.showPlot===false)return;
+  const cv=$('#plot'),dpr=window.devicePixelRatio||1,W=cv.clientWidth,H=200;
+  cv.width=W*dpr;cv.height=H*dpr;
+  const ctx=cv.getContext('2d');ctx.setTransform(dpr,0,0,dpr,0,0);ctx.clearRect(0,0,W,H);
+  const ml=46,mr=12,mt=8,mb=26,pw=W-ml-mr,ph=H-mt-mb;
+  const {fs,zs}=sweepData,ds=zs.map(z=>dB(gammaSrc(z)));
+  const ymin=Math.max(-60,Math.min(-30,Math.floor(Math.min(...ds)/10)*10)),ymax=0;
+  const fa=fs[0],fb=fs[fs.length-1];
+  const X=ff=>ml+(ff-fa)/(fb-fa)*pw,Y=v=>mt+(ymax-Math.max(v,ymin))/(ymax-ymin)*ph;
+  ctx.font='11px "Helvetica Neue",Helvetica,Arial,sans-serif';ctx.fillStyle='#666';ctx.strokeStyle='#e2e2e2';ctx.lineWidth=1;
+  ctx.textAlign='right';ctx.textBaseline='middle';
+  for(let v=0;v>=ymin;v-=10){ctx.beginPath();ctx.moveTo(ml,Y(v));ctx.lineTo(ml+pw,Y(v));ctx.stroke();ctx.fillText(v+' dB',ml-5,Y(v));}
+  const span=(fb-fa)/1e9,raw=span/7,p=Math.pow(10,Math.floor(Math.log10(raw))),st=[1,2,5,10].map(m=>m*p).find(s=>s>=raw);
+  ctx.textAlign='center';ctx.textBaseline='top';
+  for(let g=Math.ceil(fa/1e9/st)*st;g<=fb/1e9+1e-9;g+=st){const x=X(g*1e9);ctx.beginPath();ctx.moveTo(x,mt);ctx.lineTo(x,mt+ph);ctx.stroke();ctx.fillText(+g.toFixed(3),x,mt+ph+4);}
+  ctx.textAlign='right';ctx.fillText('GHz',ml+pw,mt+ph+4);
+  ctx.strokeStyle='#000';ctx.lineWidth=1.2;ctx.beginPath();ctx.moveTo(ml,mt);ctx.lineTo(ml,mt+ph);ctx.lineTo(ml+pw,mt+ph);ctx.stroke();
+  ctx.strokeStyle='#999';ctx.setLineDash([5,4]);ctx.beginPath();ctx.moveTo(ml,Y(-10));ctx.lineTo(ml+pw,Y(-10));ctx.stroke();
+  const f=F0();if(f>=fa&&f<=fb){ctx.strokeStyle=css('--target');ctx.beginPath();ctx.moveTo(X(f),mt);ctx.lineTo(X(f),mt+ph);ctx.stroke();}
+  const fv=FV();if(Math.abs(fv-f)>1&&fv>=fa&&fv<=fb){ // view-frequency marker
+    ctx.save();ctx.setLineDash([]);ctx.strokeStyle=css('--accent');ctx.lineWidth=1.5;ctx.beginPath();ctx.moveTo(X(fv),mt);ctx.lineTo(X(fv),mt+ph);ctx.stroke();
+    const k=sweepData.fs.reduce((b,ff,i)=>Math.abs(ff-fv)<Math.abs(sweepData.fs[b]-fv)?i:b,0);
+    ctx.fillStyle=css('--accent');ctx.beginPath();ctx.arc(X(fv),Y(dB(gammaSrc(sweepData.zs[k]))),4,0,2*Math.PI);ctx.fill();ctx.restore();
+  }
+  ctx.setLineDash([]);
+  ctx.strokeStyle=SWEEPCOL;ctx.lineWidth=2.5;ctx.lineJoin='round';ctx.beginPath();
+  ds.forEach((v,k)=>{k?ctx.lineTo(X(fs[k]),Y(v)):ctx.moveTo(X(fs[k]),Y(v));});ctx.stroke();
+  let mi=0;ds.forEach((v,k)=>{if(v<ds[mi])mi=k;});
+  let k0=0;fs.forEach((ff,k)=>{if(Math.abs(ff-f)<Math.abs(fs[k0]-f))k0=k;});
+  let bw='not below −10 dB at f₀';
+  if(ds[k0]<-10){let a=k0,b=k0;while(a>0&&ds[a-1]<-10)a--;while(b<ds.length-1&&ds[b+1]<-10)b++;
+    bw=`${fx(fs[a]/1e9,1)} – ${fx(fs[b]/1e9,1)} GHz (${fx((fs[b]-fs[a])/f*100,1)}%)${a===0||b===ds.length-1?', extends past sweep edge':''}`;}
+  $('#plotInfo').textContent=`best ${fx(ds[mi],1)} dB at ${fx(fs[mi]/1e9,2)} GHz · −10 dB band: ${bw}`;
+}
+
+function draw(){
+  const Zend=drawChart();drawPlot();
+  fvUI();
+  const f=FV(),ZL=loadZ(f),z0=state.z0;
+  const G=gamma(Zend),Gs=gammaSrc(Zend),m=cabs(Gs);
+  const vswr=m<1?(1+m)/(1-m):Infinity;
+  const ok=dB(Gs)<-20;
+  const zn=C(Zend.re/z0,Zend.im/z0),yn=inv(zn);
+  const rows=[['Z<sub>L</sub>',cplx(ZL,2,' Ω')],['Z<sub>in</sub>',cplx(Zend,2,' Ω')],['z<sub>in</sub>',cplx(zn,3)],['y<sub>in</sub>',cplx(yn,3)],
+    ['S11',`${fx(cabs(G),3)} ∠ ${fx(Math.atan2(G.im,G.re)*180/Math.PI,1)}°`],['|Γ| re: Z<sub>s</sub>',`${fx(dB(Gs),1)} dB`],['VSWR',fx(vswr,2)]];
+  $('#readout').innerHTML=rows.map(r=>`<div class="rt"><span>${r[0]}</span><span>${r[1]}</span></div>`).join('')+
+    `<div class="status ${ok?'good':'bad'}">${ok?'● Matched (< −20 dB)':'● Not matched yet'}</div>`;
+  const lz=C(ZL.re/z0,ZL.im/z0);
+  $('#loadInfo').innerHTML=`at ${fx(f/1e9,2)} GHz: Z<sub>L</sub> = ${cplx(ZL,2,' Ω')} · z = ${cplx(lz,3)} · y = ${cplx(inv(lz),3)}`;
+  document.querySelectorAll('#els .item').forEach((d,i)=>{d.querySelector('[data-info]').textContent=elInfo(state.els[i]);});
+  $('#chain').innerHTML=['<span class="chip">Device</span>',...state.els.map((el,i)=>`← <span class="chip${el.off?' off':''}" style="border-color:${COLORS[i%COLORS.length]}">${i+1} ${META[el.type].label.replace(' (shunt)','')}</span>`),'← <span class="chip">Source</span>'].join(' ');
+  const Ws=synthW(state.synZ);$('#synW').textContent=isFinite(Ws)?`${fx(Ws,2)} µm`:'out of range';
+  const a=msCalc(5),b=msCalc(50);
+  $('#subInfo').textContent=`W 5 µm → ${fx(a.Zc,1)} Ω (εeff ${fx(a.ee,2)}) · W 50 µm → ${fx(b.Zc,1)} Ω (εeff ${fx(b.ee,2)}) · ${state.sub.model==='simple'?'simple model: εeff = εr, T ignored':'Hammerstad–Jensen, quasi-static, lossless'}`;
+}
+
+/* ---------- zoom / pan / hover ---------- */
+const cvs=$('#smith'),tip=$('#tip'),snapRing=$('#snap');
+const toG=(px,py)=>C(view.cu+(px-geom.cx)/geom.S,view.cv-(py-geom.cy)/geom.S);
+function clampView(){
+  view.zoom=Math.min(Math.max(view.zoom,1),5000);
+  if(view.zoom<=1.0001){view.cu=0;view.cv=0;return;}
+  view.cu=Math.min(Math.max(view.cu,-1.1),1.1);view.cv=Math.min(Math.max(view.cv,-1.1),1.1);
+}
+function zoomAt(px,py,factor){
+  const g=toG(px,py);view.zoom*=factor;view.zoom=Math.min(Math.max(view.zoom,1),5000);
+  const S=geom.R*view.zoom;view.cu=g.re-(px-geom.cx)/S;view.cv=g.im+(py-geom.cy)/S;clampView();draw();
+}
+cvs.addEventListener('wheel',e=>{e.preventDefault();const r=cvs.getBoundingClientRect();zoomAt(e.clientX-r.left,e.clientY-r.top,Math.exp(-e.deltaY*0.0015));},{passive:false});
+let drag=null,dragEl=null;
+const SNAP_PX=6; // snapping only grabs within this many pixels of a grid circle, so it stays gentle
+const toPx=Z=>{const g=gamma(Z);return [geom.cx+(g.re-view.cu)*geom.S,geom.cy-(g.im-view.cv)*geom.S];};
+const PT_PX=8; // snap radius for the chart centre / target point
+function snapPoints(){
+  const pts=[{Z:C(state.z0,0),name:'center (z = 1)'}],Zt=conj(C(state.src.r,state.src.x));
+  if(cabs(sub(Zt,pts[0].Z))>1e-9)pts.push({Z:Zt,name:'target Z<sub>s</sub>*'});
+  return pts;
+}
+// Snap a dragged point onto a line-impedance circle where the component's own path crosses it.
+// pathZ(u) gives the endpoint for control value u; searches about ±40 px of path around uc.
+function lcSnap(pathZ,uc,mx,my,best){
+  // skip the dragged element's own circles: it always lies on its "start" circle
+  const LC=lineCircles().filter(cc=>!dragEl||cc.i!==dragEl.i);if(!LC.length)return null;
+  const [x0,y0]=toPx(pathZ(uc)),eps=1e-4*(1+Math.abs(uc)),[x1,y1]=toPx(pathZ(uc+eps));
+  const sp=Math.hypot(x1-x0,y1-y0)/eps;if(!(sp>0)||!isFinite(sp))return null;
+  const D=40/sp,N=80;let res=null,bd=best;
+  const h=(u,cc)=>{const g=gamma(pathZ(u));return Math.hypot(g.re-cc.c,g.im)-cc.R;};
+  LC.forEach(cc=>{
+    let ua=uc-D,ha=h(ua,cc);
+    for(let k=1;k<=N;k++){
+      const ub=uc-D+2*D*k/N,hb=h(ub,cc);
+      if(isFinite(ha)&&isFinite(hb)&&ha*hb<=0&&ha!==hb){
+        let lo=ua,hi=ub,hl=ha;
+        for(let it=0;it<30;it++){const m=(lo+hi)/2,hm=h(m,cc);if(hl*hm<=0)hi=m;else{lo=m;hl=hm;}}
+        const u=(lo+hi)/2,[px,py]=toPx(pathZ(u)),d=Math.hypot(px-mx,py-my);
+        if(d<bd){bd=d;res={u,snap:{kind:'zl',c:cc.c,R:cc.R,Zl:cc.Zl,g:cc.g,tag:cc.tag,i:cc.i,name:cc.name}};}
+      }
+      ua=ub;ha=hb;
+    }
+  });
+  return res;
+}
+function snapVals(){const s=new Set([1]);LEVELS.forEach((l,k)=>{if(lvAlpha(k)>0.5)l.forEach(v=>s.add(v));});return [...s];}
+function nearTheta(th,cur){th=((th%Math.PI)+Math.PI)%Math.PI;let v=th+Math.round((cur-th)/Math.PI)*Math.PI;if(v<0)v+=Math.PI;return v;}
+function setTheta(el,th,p){
+  th=nearTheta(th,p.th);
+  // θ here is at the view frequency; ideal lines store θ at f0, so scale back
+  if(el.mode==='ms')el.len=th/(2*Math.PI*FV()*Math.sqrt(p.ee))*C0*1e6;else el.deg=th*180/Math.PI*F0()/FV();
+}
+function syncElRow(i){
+  const el=state.els[i],[vk,mk]=keysOf(el),d=document.querySelectorAll('#els .item')[i];if(!d)return;
+  if(el[vk]>el[mk])el[mk]=+(el[vk]*1.5).toPrecision(3);
+  const sl=d.querySelector('[data-k=slider]');
+  d.querySelector('[data-k=val]').value=+(+el[vk]).toPrecision(5);
+  d.querySelector('[data-k=max]').value=el[mk];
+  sl.max=el[mk];sl.step=el[mk]/2000;sl.value=el[vk];
+}
+// Move component dragEl.i so its endpoint follows the mouse along its own trajectory.
+function dragTo(mx,my,noSnap){
+  const el=state.els[dragEl.i],Zp=dragEl.Zp,f=FV(),w=2*Math.PI*f,z0=state.z0,t=el.type;
+  let G=toG(mx,my);const gm=cabs(G);if(gm>0.995)G=C(G.re*0.995/gm,G.im*0.995/gm);
+  const zm=div(add(C(1),G),sub(C(1),G)),Zm=C(zm.re*z0,zm.im*z0);
+  const T=noSnap?[]:snapVals(),near=Z=>{const [x,y]=toPx(Z);return Math.hypot(x-mx,y-my);};
+  dragSnap=null;
+  if(t==='seriesL'||t==='seriesC'){
+    // series part: moves on its constant-r circle → snap onto constant-g circles
+    const r0=Zp.re/z0;let xo=Zm.im/z0,best=SNAP_PX;
+    // point snap first: the place on this path with the same reactance as the centre/target
+    if(!noSnap)for(const sp of snapPoints()){const xt=sp.Z.im/z0,Zq=C(r0*z0,xt*z0),[ax,ay]=toPx(Zq),[bx,by]=toPx(sp.Z);
+      if(near(sp.Z)<=PT_PX&&Math.hypot(ax-bx,ay-by)<=PT_PX){xo=xt;dragSnap={kind:'pt',Z:Zq,name:sp.name};T.length=0;break;}}
+    T.forEach(tv=>{const s=r0/tv-r0*r0;if(s<=0)return;const xs=(xo<0?-1:1)*Math.sqrt(s);const d=near(C(r0*z0,xs*z0));if(d<best){best=d;xo=xs;dragSnap={kind:'g',t:tv};}});
+    if(!noSnap&&!(dragSnap&&dragSnap.kind==='pt')){
+      const pz=u=>C(r0*z0,u*z0),r=lcSnap(pz,xo,mx,my,dragSnap?near(pz(xo)):SNAP_PX);
+      if(r){xo=r.u;dragSnap=r.snap;}
+    }
+    const X=xo*z0-Zp.im;
+    if(t==='seriesL')el.val=X>0?X/w*1e12:0;else el.val=X<0?Math.min(-1/(w*X)*1e15,1e5):1e5;
+  }else if(t!=='tline'){
+    // shunt part or stub: moves on its constant-g circle → snap onto constant-r circles
+    const Yp=inv(Zp),g0=Yp.re*z0;let bo=inv(Zm).im*z0,best=SNAP_PX;
+    // point snap first: the place on this path with the same susceptance as the centre/target
+    if(!noSnap)for(const sp of snapPoints()){const bt=inv(sp.Z).im*z0,Zq=inv(C(g0/z0,bt/z0)),[ax,ay]=toPx(Zq),[bx,by]=toPx(sp.Z);
+      if(near(sp.Z)<=PT_PX&&Math.hypot(ax-bx,ay-by)<=PT_PX){bo=bt;dragSnap={kind:'pt',Z:Zq,name:sp.name};T.length=0;break;}}
+    T.forEach(tv=>{const s=g0/tv-g0*g0;if(s<=0)return;const bs=(bo<0?-1:1)*Math.sqrt(s);const d=near(inv(C(g0/z0,bs/z0)));if(d<best){best=d;bo=bs;dragSnap={kind:'r',t:tv};}});
+    if(!noSnap&&!(dragSnap&&dragSnap.kind==='pt')){
+      const pz=u=>inv(C(g0/z0,u/z0)),r=lcSnap(pz,bo,mx,my,dragSnap?near(pz(bo)):SNAP_PX);
+      if(r){bo=r.u;dragSnap=r.snap;}
+    }
+    const B=bo/z0-Yp.im;
+    if(t==='shuntL')el.val=B<0?Math.min(-1/(w*B)*1e12,1e5):1e5;
+    else if(t==='shuntC')el.val=B>0?B/w*1e15:0;
+    else{const p=lineParams(el,f);setTheta(el,t==='ostub'?Math.atan(B*p.Zc):Math.atan(-1/(B*p.Zc)),p);}
+  }else{
+    // series line: rotates about its own Z0 → snap onto constant-r or constant-g circles
+    const p=lineParams(el,f),Zc=C(p.Zc);
+    const gp=div(sub(Zp,Zc),add(Zp,Zc)),gmm=div(sub(Zm,Zc),add(Zm,Zc));
+    let th=nearTheta((Math.atan2(gp.im,gp.re)-Math.atan2(gmm.im,gmm.re))/2,p.th);
+    const zAt=a=>{const tt=Math.tan(a);return mul(Zc,div(add(Zp,C(0,p.Zc*tt)),add(Zc,mul(C(0,tt),Zp))));};
+    // point snap first: nearest place on the line's circle to the centre/target
+    if(!noSnap)for(const sp of snapPoints()){
+      if(near(sp.Z)>PT_PX)continue;
+      const [bx,by]=toPx(sp.Z);let bestA=null,bd=PT_PX;
+      for(let k=0;k<720;k++){const a=k*Math.PI/720,[ax,ay]=toPx(zAt(a)),d=Math.hypot(ax-bx,ay-by);if(d<bd){bd=d;bestA=a;}}
+      if(bestA!=null){th=bestA;dragSnap={kind:'pt',Z:zAt(bestA),name:sp.name};T.length=0;break;}
+    }
+    if(T.length){
+      const span=0.2,N=160;let best=SNAP_PX,prev=null;
+      for(let k=0;k<=N;k++){
+        const a=th-span+2*span*k/N,Z=zAt(a),z=C(Z.re/z0,Z.im/z0),cur={a,r:z.re,g:inv(z).re};
+        if(prev)T.forEach(tv=>['r','g'].forEach(kd=>{const v0=prev[kd]-tv,v1=cur[kd]-tv;
+          if(v0*v1<=0&&v0!==v1){const a2=prev.a+(cur.a-prev.a)*v0/(v0-v1),d=near(zAt(a2));if(d<best){best=d;th=a2;dragSnap={kind:kd,t:tv};}}}));
+        prev=cur;
+      }
+    }
+    if(!noSnap&&!(dragSnap&&dragSnap.kind==='pt')){
+      const r=lcSnap(zAt,th,mx,my,dragSnap?near(zAt(th)):SNAP_PX);
+      if(r){th=r.u;dragSnap=r.snap;}
+    }
+    setTheta(el,th,p);
+  }
+  syncElRow(dragEl.i);draw();
+}
+function showTip(html,ax,ay){
+  const r=cvs.getBoundingClientRect();tip.innerHTML=html;tip.style.display='block';
+  let x=ax+14,yy=ay+14;
+  if(x+tip.offsetWidth>r.width)x-=tip.offsetWidth+28;
+  if(yy+tip.offsetHeight>r.height)yy-=tip.offsetHeight+28;
+  tip.style.left=x+'px';tip.style.top=yy+'px';
+}
+const pointHTML=(p,extra='')=>{
+  const z0=state.z0,Z=p.Z,z=C(Z.re/z0,Z.im/z0),y=inv(z),G=gamma(Z);
+  return `<div style="font-weight:600;color:${p.col};margin-bottom:2px">${p.label}</div>${extra}`+
+    `Z = ${cplx(Z,2,' Ω')}<br>z = ${cplx(z,3)}<br>y = ${cplx(y,3)}<br>Γ = ${fx(cabs(G),3)} ∠ ${fx(Math.atan2(G.im,G.re)*180/Math.PI,1)}°`;
+};
+// nearest key point within 14 px; draggable component dots win over the load/target markers
+const nearestPt=(mx,my)=>{
+  const pick=list=>{let best=null,bd=14;list.forEach(p=>{const d=Math.hypot(p.x-mx,p.y-my);if(d<bd){bd=d;best=p;}});return best;};
+  return pick(snapPts.filter(p=>p.i!=null))||pick(snapPts);
+};
+cvs.addEventListener('pointerdown',e=>{
+  const r=cvs.getBoundingClientRect(),p=nearestPt(e.clientX-r.left,e.clientY-r.top);
+  cvs.setPointerCapture(e.pointerId);
+  if(p&&p.i!=null){dragEl={i:p.i,Zp:p.Zp};cvs.style.cursor='grabbing';return;}
+  drag={x:e.clientX,y:e.clientY};cvs.style.cursor='';cvs.classList.add('drag');
+});
+cvs.addEventListener('pointerup',()=>{
+  if(dragEl){dragEl=null;dragSnap=null;save();draw();}
+  drag=null;cvs.classList.remove('drag');cvs.style.cursor='';
+});
+cvs.addEventListener('dblclick',()=>{if(dragEl)return;view={zoom:1,cu:0,cv:0};draw();});
+cvs.addEventListener('pointermove',e=>{
+  if(!geom)return;
+  const r=cvs.getBoundingClientRect(),mx=e.clientX-r.left,my=e.clientY-r.top;
+  if(dragEl){
+    dragTo(mx,my,e.shiftKey||state.snap===false);
+    const p=snapPts.find(q=>q.i===dragEl.i);if(!p)return;
+    const el=state.els[dragEl.i],[vk,,unit]=keysOf(el);
+    const extra=`<div style="margin-bottom:2px"><b>${+(+el[vk]).toPrecision(4)} ${unit}</b>${dragSnap?` · <span style="color:var(--accent)">snapped to ${dragSnap.kind==='pt'?dragSnap.name:dragSnap.kind==='zl'?(dragSnap.g!=null?`${dragSnap.name} g-circle (g = ${nice(+dragSnap.g.toPrecision(3))})`:`${dragSnap.name} Z₀ circle (through ${dragSnap.tag})`):`${dragSnap.kind} = ${nice(dragSnap.t)}`}</span>`:''}</div>`;
+    snapRing.style.display='block';snapRing.style.left=p.x+'px';snapRing.style.top=p.y+'px';snapRing.style.borderColor=p.col;
+    showTip(pointHTML(p,extra),p.x,p.y);return;
+  }
+  if(drag){view.cu-=(e.clientX-drag.x)/geom.S;view.cv+=(e.clientY-drag.y)/geom.S;drag={x:e.clientX,y:e.clientY};clampView();tip.style.display='none';snapRing.style.display='none';draw();return;}
+  // hover: lock onto the nearest key point (load, component endpoints, target) within 14 px
+  const best=nearestPt(mx,my);
+  if(best){
+    snapRing.style.display='block';snapRing.style.left=best.x+'px';snapRing.style.top=best.y+'px';snapRing.style.borderColor=best.col;
+    cvs.style.cursor=best.i!=null?'move':'crosshair';
+    showTip(pointHTML(best,best.i!=null?`<div style="color:#999;font-size:11.5px;margin-bottom:2px">drag to change the value${state.snap===false?'':' · Shift = no snapping'}</div>`:''),best.x,best.y);
+  }else{
+    snapRing.style.display='none';cvs.style.cursor='';
+    const G=toG(mx,my);
+    if(G.re*G.re+G.im*G.im>1){tip.style.display='none';return;}
+    const z=div(add(C(1),G),sub(C(1),G)),y=inv(z);
+    showTip(`z = ${cplx(z,3)}<br>y = ${cplx(y,3)}<br>Z = ${cplx(C(z.re*state.z0,z.im*state.z0),2,' Ω')}`,mx,my);
+  }
+});
+cvs.addEventListener('pointerleave',()=>{tip.style.display='none';snapRing.style.display='none';});
+$('#zIn').onclick=()=>zoomAt(geom.cx,geom.cy,1.6);
+$('#zOut').onclick=()=>zoomAt(geom.cx,geom.cy,1/1.6);
+$('#zReset').onclick=()=>{view={zoom:1,cu:0,cv:0};draw();};
+
+window.addEventListener('resize',draw);
+syncInputs();renderEls();draw();
+
+/* ---------- complex calculator (left-panel section) ---------- */
+(()=>{
+  const PI=Math.PI;
+  const cdiv=(a,b)=>{const d=b.re*b.re+b.im*b.im;if(d===0)throw Error('division by zero');return C((a.re*b.re+a.im*b.im)/d,(a.im*b.re-a.re*b.im)/d);};
+  const cexp=a=>{const m=Math.exp(a.re);return C(m*Math.cos(a.im),m*Math.sin(a.im));};
+  const cln=a=>{if(a.re===0&&a.im===0)throw Error('log of zero');return C(Math.log(cabs(a)),Math.atan2(a.im,a.re));};
+  const csqrt=a=>{const r=cabs(a);return C(Math.sqrt(Math.max(r+a.re,0)/2),(a.im<0?-1:1)*Math.sqrt(Math.max(r-a.re,0)/2));};
+  const cpow=(a,b)=>{
+    if(b.im===0&&Number.isInteger(b.re)&&Math.abs(b.re)<=64){let r=C(1);for(let k=0;k<Math.abs(b.re);k++)r=mul(r,a);return b.re<0?cdiv(C(1),r):r;}
+    if(a.re===0&&a.im===0)return C(0);
+    return cexp(mul(b,cln(a)));
+  };
+  const polar=(m,d)=>C(m*Math.cos(d*PI/180),m*Math.sin(d*PI/180));
+  const parallel=(a,b)=>{const s=add(a,b);if(s.re===0&&s.im===0)throw Error('a || b with a + b = 0 (resonance: infinite)');return cdiv(mul(a,b),s);};
+  const csin=a=>C(Math.sin(a.re)*Math.cosh(a.im),Math.cos(a.re)*Math.sinh(a.im));
+  const ccos=a=>C(Math.cos(a.re)*Math.cosh(a.im),-Math.sin(a.re)*Math.sinh(a.im));
+  const R=a=>{if(!a)throw Error('missing argument');return a.re;};
+  const X=a=>a.im!==0?Math.abs(a.im):Math.abs(a.re);
+  const zref=()=>C(state.z0);
+  const FN={
+    abs:a=>C(cabs(a)),mag:a=>C(cabs(a)),
+    arg:a=>C(Math.atan2(a.im,a.re)*180/PI),ang:a=>C(Math.atan2(a.im,a.re)*180/PI),
+    re:a=>C(a.re),real:a=>C(a.re),im:a=>C(a.im),imag:a=>C(a.im),
+    conj:a=>conj(a),inv:a=>cdiv(C(1),a),
+    sqrt:csqrt,exp:cexp,ln:cln,log10:a=>cdiv(cln(a),C(Math.LN10)),db:a=>C(20*Math.log10(cabs(a))),
+    sin:csin,cos:ccos,tan:a=>cdiv(csin(a),ccos(a)),
+    deg:a=>C(R(a)*180/PI),rad:a=>C(R(a)*PI/180),
+    polar:(m,d)=>polar(R(m),R(d)),
+    par:(...a)=>{if(!a.length)throw Error('par needs arguments');return a.reduce(parallel);},
+    zl:(L,f)=>C(0,2*PI*R(f)*R(L)),
+    zc:(c,f)=>cdiv(C(1),C(0,2*PI*R(f)*R(c))),
+    lx:(x,f)=>C(X(x)/(2*PI*R(f))),
+    cx:(x,f)=>C(1/(2*PI*R(f)*X(x))),
+    gam:(Z,z0)=>{const r=z0||zref();return cdiv(sub(Z,r),add(Z,r));},
+    zg:(G,z0)=>{const r=z0||zref();return mul(r,cdiv(add(C(1),G),sub(C(1),G)));},
+    vswr:G=>{const m=cabs(G);if(m>=1)throw Error('|Γ| ≥ 1');return C((1+m)/(1-m));},
+    zline:(ZL,Zc,d)=>{const jt=C(0,Math.tan(R(d)*PI/180));return mul(Zc,cdiv(add(ZL,mul(jt,Zc)),add(Zc,mul(jt,ZL))));},
+  };
+  const fnOf=n=>FN[n]||FN[n.toLowerCase()];
+  const CONST={j:()=>C(0,1),pi:()=>C(PI),e:()=>C(Math.E),c:()=>C(C0),Z0:()=>C(state.z0),f0:()=>C(state.f0*1e9),w:()=>C(2*PI*state.f0*1e9)};
+
+  let cs={open:false,min:false,help:false,x:null,y:null,hist:[],vars:{},ans:[0,0]};
+  try{const s=JSON.parse(localStorage.getItem('smithMatcher.calc'));if(s)cs={...cs,...s};}catch(e){}
+  const csave=()=>{try{localStorage.setItem('smithMatcher.calc',JSON.stringify(cs))}catch(e){}};
+
+  const SI={'':1,f:1e-15,p:1e-12,n:1e-9,u:1e-6,'µ':1e-6,m:1e-3,k:1e3,K:1e3,M:1e6,G:1e9,T:1e12};
+  const IDC=/[A-Za-z_0-9µ]/;
+  function tokenize(s){
+    const t=[];let i=0;
+    while(i<s.length){
+      const c=s[i];
+      if(/\s/.test(c)){i++;continue;}
+      if(/[0-9.]/.test(c)){
+        const i0=i;
+        const m=s.slice(i).match(/^(\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?/);
+        if(!m)throw Error(`bad number near "${s.slice(i,i+6)}"`);
+        let v=parseFloat(m[0]);i+=m[0].length;
+        const u=s.slice(i).match(/^([fpnuµmkKMGT]?)(Hz|ohms?|Ω|F|H|s)?(?![A-Za-z_0-9µ])/);
+        if(u&&u[0].length){v*=SI[u[1]];i+=u[0].length;}
+        let im=false;if(s[i]==='j'&&!IDC.test(s[i+1]||'')){im=true;i++;}
+        t.push({k:'num',v:im?C(0,v):C(v),s:s.slice(i0,i)});continue;
+      }
+      if(c==='j'&&/[0-9.]/.test(s[i+1]||'')){t.push({k:'id',v:'j'});i++;continue;}
+      if(/[A-Za-z_µ]/.test(c)){const m=s.slice(i).match(/^[A-Za-z_µ][A-Za-z_0-9µ]*/);t.push({k:'id',v:m[0]});i+=m[0].length;continue;}
+      if(c==='|'){if(s[i+1]==='|'){t.push({k:'op',v:'||'});i+=2;continue;}throw Error('use || for parallel');}
+      if(c==='∥'){t.push({k:'op',v:'||'});i++;continue;}
+      if('+-*/^(),=∠@'.includes(c)){t.push({k:'op',v:c==='@'?'∠':c});i++;continue;}
+      if(c==='×'||c==='·'){t.push({k:'op',v:'*'});i++;continue;}
+      if(c==='−'){t.push({k:'op',v:'-'});i++;continue;}
+      throw Error(`unexpected character "${c}"`);
+    }
+    return t;
+  }
+  function lookup(n){
+    if(n==='ans')return C(cs.ans[0],cs.ans[1]);
+    if(cs.vars[n])return C(cs.vars[n][0],cs.vars[n][1]);
+    if(CONST[n])return CONST[n]();
+    if(n.length>1&&n[0]==='j'){try{return mul(C(0,1),lookup(n.slice(1)));}catch(e){}}
+    throw Error(`unknown name "${n}"`);
+  }
+  /* parse → expression tree (used both to evaluate and to draw the expression) */
+  function parse(src){
+    const T=tokenize(src);let p=0,name=null;
+    if(!T.length)throw Error('empty');
+    const isOp=v=>T[p]&&T[p].k==='op'&&T[p].v===v;
+    const eat=v=>{if(!isOp(v))throw Error(`expected "${v}"`);p++;};
+    const startsPrimary=()=>{const t=T[p];return t&&(t.k==='num'||t.k==='id'||(t.k==='op'&&t.v==='('));};
+    const B=(op,a,b,imp)=>({t:'bin',op,a,b,imp});
+    const addE=()=>{let a=parE();while(isOp('+')||isOp('-')){const o=T[p++].v;a=B(o,a,parE());}return a;};
+    const parE=()=>{let a=mulE();while(isOp('||')){p++;a=B('||',a,mulE());}return a;};
+    const mulE=()=>{let a=angE();for(;;){
+      if(isOp('*')){p++;a=B('*',a,angE());}
+      else if(isOp('/')){p++;a=B('/',a,angE());}
+      else if(startsPrimary())a=B('*',a,angE(),true);
+      else break;}return a;};
+    const angE=()=>{let a=unE();if(isOp('∠')){p++;a=B('∠',a,unE());}return a;};
+    const unE=()=>{if(isOp('-')){p++;return {t:'neg',a:unE()};}if(isOp('+')){p++;return unE();}return powE();};
+    const powE=()=>{const a=prim();if(isOp('^')){p++;return B('^',a,unE());}return a;};
+    const prim=()=>{
+      const t=T[p];if(!t)throw Error('unexpected end of input');
+      if(t.k==='num'){p++;return {t:'num',v:t.v,s:t.s};}
+      if(isOp('(')){p++;const a=addE();eat(')');return {...a,par:true};}
+      if(t.k==='id'){
+        p++;
+        if(fnOf(t.v)&&isOp('(')){p++;const args=[];if(!isOp(')')){args.push(addE());while(isOp(',')){p++;args.push(addE());}}eat(')');return {t:'call',f:t.v,args};}
+        return {t:'id',n:t.v};
+      }
+      throw Error(`unexpected "${t.v}"`);
+    };
+    if(T.length>1&&T[0].k==='id'&&T[1].k==='op'&&T[1].v==='='){
+      name=T[0].v;
+      if(fnOf(name)||CONST[name]||name==='ans')throw Error(`"${name}" is reserved`);
+      p=2;
+    }
+    const ast=addE();
+    if(p<T.length)throw Error(`unexpected "${T[p].v}"`);
+    return {name,ast};
+  }
+  function ev(n){
+    switch(n.t){
+      case 'num':return n.v;
+      case 'id':return lookup(n.n);
+      case 'neg':{const a=ev(n.a);return C(-a.re,-a.im);}
+      case 'call':return fnOf(n.f)(...n.args.map(ev));
+      case 'bin':{const a=ev(n.a),b=ev(n.b);
+        switch(n.op){case '+':return add(a,b);case '-':return sub(a,b);case '*':return mul(a,b);case '/':return cdiv(a,b);
+          case '||':return parallel(a,b);case '^':return cpow(a,b);case '∠':return polar(a.re,b.re);}}
+    }
+  }
+  function evaluate(src){
+    const {name,ast}=parse(src);const v=ev(ast);
+    if(!fin(v))throw Error('result is not finite');
+    return {name,v,ast};
+  }
+
+  /* draw an expression tree as math: superscript powers, stacked fractions, √ bars */
+  const NAMES={j:'<i>j</i>',pi:'π',e:'<i>e</i>',c:'<i>c</i>',w:'<i>ω</i>',Z0:'<i>Z</i><sub>0</sub>',f0:'<i>f</i><sub>0</sub>',ans:'ans'};
+  function nameHTML(n){
+    if(NAMES[n])return NAMES[n];
+    if(!cs.vars[n]&&n.length>1&&n[0]==='j'&&(NAMES[n.slice(1)]||cs.vars[n.slice(1)]||CONST[n.slice(1)]))return '<i>j</i>'+nameHTML(n.slice(1));
+    const m=n.match(/^([A-Za-zµ]+)_?(\d+)$/);
+    if(m)return `<i>${m[1]}</i><sub>${m[2]}</sub>`;
+    return `<i>${n}</i>`;
+  }
+  function numHTML(s){
+    const m=s.match(/^(\d+\.?\d*|\.\d+)(?:[eE]([+-]?\d+))?(.*)$/);if(!m)return s;
+    let h=m[1];
+    if(m[2]!=null)h+=`×10<sup>${m[2].replace('-','−').replace('+','')}</sup>`;
+    let rest=m[3],jj=false;
+    if(rest.endsWith('j')){jj=true;rest=rest.slice(0,-1);}
+    if(rest)h+=`<span class="si">${rest}</span>`;
+    if(jj)h+='<i>j</i>';
+    return h;
+  }
+  const wrap=(n,h)=>n.par?`<span class="pl">(</span>${h}<span class="pl">)</span>`:h;
+  function mh(n){return wrap(n,inner(n));}
+  function inner(n){
+    switch(n.t){
+      case 'num':return numHTML(n.s);
+      case 'id':return nameHTML(n.n);
+      case 'neg':return `−${mh(n.a)}`;
+      case 'call':{
+        const a=n.args.map(inner);
+        if(n.f==='sqrt'&&a.length===1)return `√<span class="rad">${a[0]}</span>`;
+        if((n.f==='abs'||n.f==='mag')&&a.length===1)return `|${a[0]}|`;
+        return `${n.f}(${a.join(', ')})`;
+      }
+      case 'bin':
+        switch(n.op){
+          case '+':return `${mh(n.a)} + ${mh(n.b)}`;
+          case '-':return `${mh(n.a)} − ${mh(n.b)}`;
+          case '*':return n.imp?`${mh(n.a)}${n.a.t==='id'&&n.a.n==='j'&&!n.a.par?'':'&thinsp;'}${mh(n.b)}`:`${mh(n.a)} · ${mh(n.b)}`;
+          case '/':return `<span class="frac"><span class="nu">${inner(n.a)}</span><span class="de">${inner(n.b)}</span></span>`;
+          case '||':return `${mh(n.a)} ∥ ${mh(n.b)}`;
+          case '^':return `${mh(n.a)}<sup>${inner(n.b)}</sup>`;
+          case '∠':return `${mh(n.a)}∠${mh(n.b)}°`;
+        }
+    }
+    return '';
+  }
+  const stmtHTML=({name,ast})=>(name?nameHTML(name)+' = ':'')+mh(ast);
+
+  const fnum=x=>{if(x===0)return '0';const a=Math.abs(x);if(a>=1e-3&&a<1e6)return String(+x.toPrecision(6));return x.toExponential(4).replace(/\.?0+e/,'e');};
+  const clean=z=>{const m=cabs(z);return C(Math.abs(z.re)<=1e-12*m?0:z.re,Math.abs(z.im)<=1e-12*m?0:z.im);};
+  const rect=z=>{z=clean(z);if(z.im===0)return fnum(z.re);if(z.re===0)return `${z.im<0?'−':''}j${fnum(Math.abs(z.im))}`;return `${fnum(z.re)} ${z.im<0?'−':'+'} j${fnum(Math.abs(z.im))}`;};
+  const PFX=[[1e12,'T'],[1e9,'G'],[1e6,'M'],[1e3,'k'],[1,''],[1e-3,'m'],[1e-6,'µ'],[1e-9,'n'],[1e-12,'p'],[1e-15,'f'],[1e-18,'a']];
+  const eng=x=>{const a=Math.abs(x);const p=PFX.find(q=>a>=q[0]*0.9999999)||PFX[PFX.length-1];return `${+(x/p[0]).toPrecision(5)} ${p[1]}`.trim();};
+  const second=z=>{z=clean(z);
+    if(z.im!==0)return `${fnum(cabs(z))} ∠ ${fnum(Math.atan2(z.im,z.re)*180/PI)}°`;
+    if(z.re!==0&&(Math.abs(z.re)<1e-2||Math.abs(z.re)>=1e4))return `= ${eng(z.re)}`;
+    return '';};
+  const parseable=z=>{z=clean(z);const f=v=>String(+v.toPrecision(10));
+    if(z.im===0)return z.re<0?`(${f(z.re)})`:f(z.re);
+    if(z.re===0)return z.im<0?`(-j${f(-z.im)})`:`(j${f(z.im)})`;
+    return `(${f(z.re)} ${z.im<0?'-':'+'} j${f(Math.abs(z.im))})`;};
+  const esc=s=>s.replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+  /* Worksheet model: every row stays editable. Rows are evaluated top to bottom on every change,
+     so `ans` and variables defined in a row flow into the rows below it. */
+  const hist=$('#calcHist'),help=$('#calcHelp'),varsEl=$('#calcVars');
+  let rc=[],newDraft='',lastInp=null;
+  cs.hist=cs.hist.map(h=>({e:h.e}));
+  function recompute(){
+    const vars={};let ans=C(0);rc=[];
+    cs.hist.forEach(h=>{
+      cs.vars=vars;cs.ans=[ans.re,ans.im];
+      let p=null;
+      try{p=parse(h.e);const v=ev(p.ast);if(!fin(v))throw Error('result is not finite');
+        rc.push({p,v});if(p.name)vars[p.name]=[v.re,v.im];ans=v;}
+      catch(e){rc.push({p,err:e.message});}
+    });
+    cs.vars=vars;cs.ans=[ans.re,ans.im];
+  }
+  const resHTML=z=>{const s2=second(z);return `= ${rect(z).replace(/j/g,'<i>j</i>')}${s2?`<span class="pol">${s2}</span>`:''}`;};
+  const viewHTML=(p,v,err)=>`<div class="mexpr">${p?stmtHTML(p):''}</div>`+
+    (err?`<div class="cerr">${esc(err)}</div>`:v?`<div class="cresrow"><span class="cres click" title="Click to insert this value">${resHTML(v)}</span></div>`:'');
+  function newRowEval(){
+    const src=newDraft.trim();if(!src)return {};
+    let p;try{p=parse(src);}catch(e){return {err:e.message,partial:true};}
+    try{const v=ev(p.ast);if(!fin(v))throw Error('result is not finite');return {p,v};}catch(e){return {p,err:e.message};}
+  }
+  function rowEl(i,isNew){
+    const d=document.createElement('div');d.className='item crow';d.dataset.i=isNew?'new':i;
+    d.innerHTML=`<div class="gut"><span>${(isNew?cs.hist.length:i)+1}</span></div><div class="cont">
+        <input class="calcinput${isNew?'':' old'}" spellcheck="false" autocomplete="off"${isNew?' id="calcIn" placeholder="type an expression, e.g. (16.5 - j47.5) || 200"':' title="Edit this expression"'}>
+        <div class="cview"></div></div>${isNew?'':'<div class="rowbtns"><button data-a="del" title="Delete row">×</button></div>'}`;
+    d.querySelector('input').value=isNew?newDraft:cs.hist[i].e;
+    return d;
+  }
+  function renderHist(){
+    hist.innerHTML='';
+    cs.hist.forEach((h,i)=>hist.appendChild(rowEl(i,false)));
+    hist.appendChild(rowEl(0,true));
+    updateViews();
+  }
+  function setView(view,p,v,err){view.innerHTML=viewHTML(p,v,err);view.dataset.v=v?JSON.stringify([v.re,v.im]):'';}
+  function updateViews(){
+    recompute();
+    hist.querySelectorAll('.crow').forEach(d=>{
+      const view=d.querySelector('.cview');
+      if(d.dataset.i==='new'){const r=newRowEval();setView(view,r.p,r.v,r.partial?null:r.err);}
+      else{const c=rc[+d.dataset.i];setView(view,c.p,c.v,c.err);}
+    });
+    renderVars();
+  }
+  function renderVars(){
+    const names=Object.keys(cs.vars);
+    varsEl.innerHTML=(names.length?'Variables: '+names.map(n=>`<span class="v" data-n="${esc(n)}">${esc(n)}</span>`).join(', ')+' · ':'')+'<a id="calcClear">clear all rows</a>';
+    varsEl.querySelectorAll('.v').forEach(s=>s.onclick=()=>insert(s.dataset.n));
+    $('#calcClear').onclick=()=>{cs.hist=[];newDraft='';csave();renderHist();};
+  }
+  function insert(txt){
+    const t=(lastInp&&document.body.contains(lastInp))?lastInp:$('#calcIn');
+    const a=t.selectionStart??t.value.length,b=t.selectionEnd??t.value.length;
+    t.value=t.value.slice(0,a)+txt+t.value.slice(b);t.focus();t.setSelectionRange(a+txt.length,a+txt.length);
+    t.dispatchEvent(new Event('input',{bubbles:true}));
+  }
+  function commitNew(){
+    const src=newDraft.trim();if(!src)return;
+    const r=newRowEval();
+    if(r.err){setView(hist.querySelector('.crow[data-i=new] .cview'),r.p,null,r.err);return;}
+    cs.hist.push({e:src});if(cs.hist.length>60)cs.hist.shift();
+    newDraft='';csave();renderHist();
+    const ni=$('#calcIn');ni.focus();ni.scrollIntoView({block:'nearest'});
+  }
+  function delRow(i){cs.hist.splice(i,1);csave();renderHist();}
+  hist.addEventListener('input',e=>{
+    if(!e.target.matches('.calcinput'))return;
+    const d=e.target.closest('.crow');
+    if(d.dataset.i==='new')newDraft=e.target.value;else cs.hist[+d.dataset.i].e=e.target.value;
+    csave();updateViews();
+  });
+  hist.addEventListener('focusin',e=>{if(e.target.matches('.calcinput'))lastInp=e.target;});
+  hist.addEventListener('keydown',e=>{
+    if(!e.target.matches('.calcinput'))return;
+    const d=e.target.closest('.crow'),ins=[...hist.querySelectorAll('.calcinput')],k=ins.indexOf(e.target);
+    if(e.key==='Enter'){e.preventDefault();if(d.dataset.i==='new')commitNew();else ins[k+1].focus();}
+    else if(e.key==='ArrowUp'&&k>0){e.preventDefault();ins[k-1].focus();}
+    else if(e.key==='ArrowDown'&&k<ins.length-1){e.preventDefault();ins[k+1].focus();}
+    else if(e.key==='Backspace'&&d.dataset.i!=='new'&&e.target.value===''){
+      e.preventDefault();const i=+d.dataset.i;delRow(i);
+      const n=[...hist.querySelectorAll('.calcinput')];(n[Math.max(0,i-1)]||n[0]).focus();
+    }
+  });
+  hist.addEventListener('click',e=>{
+    const b=e.target.closest('.cres.click');
+    if(b){const v=JSON.parse(b.closest('.cview').dataset.v||'null');if(v)insert(parseable(C(v[0],v[1])));return;}
+    const del=e.target.closest('[data-a=del]');
+    if(del){delRow(+del.closest('.crow').dataset.i);return;}
+    const view=e.target.closest('.cview');
+    if(view){const t=view.closest('.crow').querySelector('.calcinput');t.focus();t.setSelectionRange(t.value.length,t.value.length);}
+  });
+  help.querySelectorAll('.ex').forEach(x=>x.onclick=()=>{const ni=$('#calcIn');newDraft=ni.value=x.textContent;updateViews();ni.focus();});
+  help.hidden=!cs.help;
+  $('#calcHelpBtn').onclick=e=>{e.stopPropagation();cs.help=!cs.help;help.hidden=!cs.help;csave();
+    if(cs.help&&state.collapsed.calc){state.collapsed.calc=false;document.querySelector('.sect[data-s=calc]').classList.remove('closed');save();}};
+  window.calcEval=src=>{const r=evaluate(src);return {rect:rect(r.v),second:second(r.v),html:stmtHTML(parse(src))};};
+  renderHist();
+})();
+</script>
+</body>
+</html>
