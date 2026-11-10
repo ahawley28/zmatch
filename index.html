@@ -201,7 +201,7 @@ input[type=range]::-moz-range-thumb{width:16px;height:16px;border-radius:50%;bac
       <li>Start at the load (device). Element 1 sits right at the device and the last element sits at the source. Drive the final point onto the orange target ring (Z<sub>s</sub>*).</li>
       <li>Press <b>+ Add component</b> (in the Matching network section) to add an element. Click an element's colored circle to bypass it, and hover a row for ↑ ↓ × (↑ moves it toward the device).</li>
       <li>Series elements move along constant-<b>r</b> circles. Shunt elements move along constant-<b>g</b> circles (turn on the admittance grid to see them). The r = 1 and g = 1 circles are drawn darker.</li>
-      <li><b>Drag a component's dot</b> on the chart to change its value. Series parts slide along their constant-r circle and shunt parts along their constant-g circle. The dot gently snaps onto a grid circle of constant g (series parts) or constant r (shunt parts) when it passes within a few pixels, and the snapped circle is shown dashed. Turn snapping off with <b>snap while dragging</b> in Setup, or hold <b>Shift</b> while dragging to skip it once. Zooming in gives finer snap circles.</li>
+      <li><b>Drag a component's dot</b> on the chart to change its value. Series parts slide along their constant-r circle and shunt parts along their constant-g circle. The dot gently snaps onto a grid circle of constant g (series parts) or constant r (shunt parts) when it passes within a few pixels, and the snapped circle is shown dashed. It also snaps onto the <b>real axis</b> (pure-real impedance). Pausing (holding the dot still or moving it very slowly) makes snapping stronger over about half a second, so you can pull the dot onto a nearby contour. Turn snapping off with <b>snap while dragging</b> in Setup, or hold <b>Shift</b> while dragging to skip it once. Zooming in gives finer snap circles.</li>
       <li><b>Y circles</b> (stubs): tick <b>Y circles</b> on a stub to draw, in its color, the constant-g circle it moves along (through its start point) and the constant-g circle through the target (g = 1 for a 50 Ω source). Other components snap onto them.</li>
       <li><b>Z₀ circles</b>: tick <b>Z₀ circles</b> on any series line in the Matching network to draw its constant-|Γ| circles (measured against that line's own Z₀), in the line's color. The <b>dashed "through target"</b> circle shows every point that line can rotate onto the target. The <b>dotted "through start"</b> circle is the full path the line can take from where it begins. Other components' dots snap onto them where their own path crosses.</li>
       <li><b>View frequency</b> (Setup): slide <i>f</i> (or press ▶ to sweep it back and forth) to see where every component's path, the input point and the readout land at that frequency. Component values don't change. Ideal lines keep θ defined at f₀, so their electrical length scales with <i>f</i>. Press <b>= f₀</b> to return to the design frequency. The slider covers the sweep range in sweep mode, or ¼·f₀ to 2·f₀ otherwise.</li>
@@ -786,6 +786,7 @@ function drawChart(){
   if(dragSnap){ // highlight the circle (or point) a dragged point is snapped to
     const t=dragSnap.t;ctx.save();ctx.strokeStyle=css('--accent');ctx.lineWidth=2.2;ctx.setLineDash([7,4]);ctx.beginPath();
     if(dragSnap.kind==='pt'){const [px,py]=P(gamma(dragSnap.Z));ctx.arc(px,py,13,0,2*Math.PI);}
+    else if(dragSnap.kind==='real'){ctx.moveTo(...P(C(-1,0)));ctx.lineTo(...P(C(1,0)));}
     else if(dragSnap.kind==='zl')circ(dragSnap.c,0,dragSnap.R);
     else if(dragSnap.kind==='r')circ(t/(1+t),0,1/(1+t));else circ(-t/(1+t),0,1/(1+t));
     ctx.stroke();ctx.restore();
@@ -943,8 +944,13 @@ function zoomAt(px,py,factor){
 cvs.addEventListener('wheel',e=>{e.preventDefault();const r=cvs.getBoundingClientRect();zoomAt(e.clientX-r.left,e.clientY-r.top,Math.exp(-e.deltaY*0.0015));},{passive:false});
 let drag=null,dragEl=null;
 const SNAP_PX=6; // snapping only grabs within this many pixels of a grid circle, so it stays gentle
+// Dwell: while a dragged dot is held still (or moved very slowly) the snap radius grows from
+// SNAP_BASE to SNAP_MAX over DWELL_MS, so pausing near a contour pulls the dot onto it.
+const SNAP_BASE=SNAP_PX,SNAP_MAX=16,DWELL_MS=450,DWELL_MOVE=4;
+let snapR=SNAP_BASE,dwell=null,dwellRaf=null;
 const toPx=Z=>{const g=gamma(Z);return [geom.cx+(g.re-view.cu)*geom.S,geom.cy-(g.im-view.cv)*geom.S];};
 const PT_PX=8; // snap radius for the chart centre / target point
+const PT_BASE=PT_PX;
 function snapPoints(){
   const pts=[{Z:C(state.z0,0),name:'center (z = 1)'}],Zt=conj(C(state.src.r,state.src.x));
   if(cabs(sub(Zt,pts[0].Z))>1e-9)pts.push({Z:Zt,name:'target Z<sub>s</sub>*'});
@@ -991,6 +997,7 @@ function syncElRow(i){
 }
 // Move component dragEl.i so its endpoint follows the mouse along its own trajectory.
 function dragTo(mx,my,noSnap){
+  const SNAP_PX=snapR,PT_PX=PT_BASE*snapR/SNAP_BASE; // radii grow while the dot is held still (see dwell below)
   const el=state.els[dragEl.i],Zp=dragEl.Zp,f=FV(),w=2*Math.PI*f,z0=state.z0,t=el.type;
   let G=toG(mx,my);const gm=cabs(G);if(gm>0.995)G=C(G.re*0.995/gm,G.im*0.995/gm);
   const zm=div(add(C(1),G),sub(C(1),G)),Zm=C(zm.re*z0,zm.im*z0);
@@ -1003,6 +1010,8 @@ function dragTo(mx,my,noSnap){
     if(!noSnap)for(const sp of snapPoints()){const xt=sp.Z.im/z0,Zq=C(r0*z0,xt*z0),[ax,ay]=toPx(Zq),[bx,by]=toPx(sp.Z);
       if(near(sp.Z)<=PT_PX&&Math.hypot(ax-bx,ay-by)<=PT_PX){xo=xt;dragSnap={kind:'pt',Z:Zq,name:sp.name};T.length=0;break;}}
     T.forEach(tv=>{const s=r0/tv-r0*r0;if(s<=0)return;const xs=(xo<0?-1:1)*Math.sqrt(s);const d=near(C(r0*z0,xs*z0));if(d<best){best=d;xo=xs;dragSnap={kind:'g',t:tv};}});
+    // real axis: where this constant-r circle crosses x = 0
+    if(!noSnap&&!(dragSnap&&dragSnap.kind==='pt')){const d=near(C(r0*z0,0));if(d<best){best=d;xo=0;dragSnap={kind:'real'};}}
     if(!noSnap&&!(dragSnap&&dragSnap.kind==='pt')){
       const pz=u=>C(r0*z0,u*z0),r=lcSnap(pz,xo,mx,my,dragSnap?near(pz(xo)):SNAP_PX);
       if(r){xo=r.u;dragSnap=r.snap;}
@@ -1016,6 +1025,8 @@ function dragTo(mx,my,noSnap){
     if(!noSnap)for(const sp of snapPoints()){const bt=inv(sp.Z).im*z0,Zq=inv(C(g0/z0,bt/z0)),[ax,ay]=toPx(Zq),[bx,by]=toPx(sp.Z);
       if(near(sp.Z)<=PT_PX&&Math.hypot(ax-bx,ay-by)<=PT_PX){bo=bt;dragSnap={kind:'pt',Z:Zq,name:sp.name};T.length=0;break;}}
     T.forEach(tv=>{const s=g0/tv-g0*g0;if(s<=0)return;const bs=(bo<0?-1:1)*Math.sqrt(s);const d=near(inv(C(g0/z0,bs/z0)));if(d<best){best=d;bo=bs;dragSnap={kind:'r',t:tv};}});
+    // real axis: where this constant-g circle crosses b = 0
+    if(!noSnap&&!(dragSnap&&dragSnap.kind==='pt')&&g0>1e-9){const d=near(C(z0/g0,0));if(d<best){best=d;bo=0;dragSnap={kind:'real'};}}
     if(!noSnap&&!(dragSnap&&dragSnap.kind==='pt')){
       const pz=u=>inv(C(g0/z0,u/z0)),r=lcSnap(pz,bo,mx,my,dragSnap?near(pz(bo)):SNAP_PX);
       if(r){bo=r.u;dragSnap=r.snap;}
@@ -1046,6 +1057,16 @@ function dragTo(mx,my,noSnap){
         prev=cur;
       }
     }
+    // real axis: where the line's circle crosses Im(Z) = 0
+    if(!noSnap&&!(dragSnap&&dragSnap.kind==='pt')){
+      const span=0.2,N=160;let best=dragSnap?near(zAt(th)):SNAP_PX,pa=null,pv=null;
+      for(let k=0;k<=N;k++){
+        const a=th-span+2*span*k/N,v=zAt(a).im;
+        if(pv!=null&&isFinite(v)&&isFinite(pv)&&pv*v<=0&&pv!==v&&Math.abs(pv-v)<1e6){
+          const a2=pa+(a-pa)*pv/(pv-v),d=near(zAt(a2));if(d<best){best=d;th=a2;dragSnap={kind:'real'};}}
+        pa=a;pv=v;
+      }
+    }
     if(!noSnap&&!(dragSnap&&dragSnap.kind==='pt')){
       const r=lcSnap(zAt,th,mx,my,dragSnap?near(zAt(th)):SNAP_PX);
       if(r){th=r.u;dragSnap=r.snap;}
@@ -1071,13 +1092,36 @@ const nearestPt=(mx,my)=>{
   const pick=list=>{let best=null,bd=14;list.forEach(p=>{const d=Math.hypot(p.x-mx,p.y-my);if(d<bd){bd=d;best=p;}});return best;};
   return pick(snapPts.filter(p=>p.i!=null))||pick(snapPts);
 };
+function dragTip(){
+  const p=snapPts.find(q=>q.i===dragEl.i);if(!p)return;
+  const el=state.els[dragEl.i],[vk,,unit]=keysOf(el);
+  const what=!dragSnap?'':dragSnap.kind==='pt'?dragSnap.name:dragSnap.kind==='real'?'real axis (x = 0)'
+    :dragSnap.kind==='zl'?(dragSnap.g!=null?`${dragSnap.name} g-circle (g = ${nice(+dragSnap.g.toPrecision(3))})`:`${dragSnap.name} Z₀ circle (through ${dragSnap.tag})`)
+    :`${dragSnap.kind} = ${nice(dragSnap.t)}`;
+  const extra=`<div style="margin-bottom:2px"><b>${+(+el[vk]).toPrecision(4)} ${unit}</b>${what?` · <span style="color:var(--accent)">snapped to ${what}</span>`:''}</div>`;
+  snapRing.style.display='block';snapRing.style.left=p.x+'px';snapRing.style.top=p.y+'px';snapRing.style.borderColor=p.col;
+  showTip(pointHTML(p,extra),p.x,p.y);
+}
+// grow the snap radius while the pointer is held still; re-apply the drag so the dot gets pulled in
+function dwellTick(now){
+  if(!dragEl||!dwell){dwellRaf=null;return;}
+  const old=snapR;snapR=SNAP_BASE+(SNAP_MAX-SNAP_BASE)*Math.min(1,(now-dwell.t)/DWELL_MS);
+  if(!dwell.noSnap&&snapR-old>0.05){dragTo(dwell.mx,dwell.my,false);dragTip();}
+  dwellRaf=requestAnimationFrame(dwellTick);
+}
 cvs.addEventListener('pointerdown',e=>{
-  const r=cvs.getBoundingClientRect(),p=nearestPt(e.clientX-r.left,e.clientY-r.top);
+  const r=cvs.getBoundingClientRect(),mx=e.clientX-r.left,my=e.clientY-r.top,p=nearestPt(mx,my);
   cvs.setPointerCapture(e.pointerId);
-  if(p&&p.i!=null){dragEl={i:p.i,Zp:p.Zp};cvs.style.cursor='grabbing';return;}
+  if(p&&p.i!=null){
+    dragEl={i:p.i,Zp:p.Zp};cvs.style.cursor='grabbing';
+    snapR=SNAP_BASE;dwell={x:mx,y:my,mx,my,t:performance.now(),noSnap:e.shiftKey||state.snap===false};
+    if(!dwellRaf)dwellRaf=requestAnimationFrame(dwellTick);
+    return;
+  }
   drag={x:e.clientX,y:e.clientY};cvs.style.cursor='';cvs.classList.add('drag');
 });
 cvs.addEventListener('pointerup',()=>{
+  if(dwellRaf){cancelAnimationFrame(dwellRaf);dwellRaf=null;}dwell=null;snapR=SNAP_BASE;
   if(dragEl){dragEl=null;dragSnap=null;save();draw();}
   drag=null;cvs.classList.remove('drag');cvs.style.cursor='';
 });
@@ -1086,12 +1130,14 @@ cvs.addEventListener('pointermove',e=>{
   if(!geom)return;
   const r=cvs.getBoundingClientRect(),mx=e.clientX-r.left,my=e.clientY-r.top;
   if(dragEl){
-    dragTo(mx,my,e.shiftKey||state.snap===false);
-    const p=snapPts.find(q=>q.i===dragEl.i);if(!p)return;
-    const el=state.els[dragEl.i],[vk,,unit]=keysOf(el);
-    const extra=`<div style="margin-bottom:2px"><b>${+(+el[vk]).toPrecision(4)} ${unit}</b>${dragSnap?` · <span style="color:var(--accent)">snapped to ${dragSnap.kind==='pt'?dragSnap.name:dragSnap.kind==='zl'?(dragSnap.g!=null?`${dragSnap.name} g-circle (g = ${nice(+dragSnap.g.toPrecision(3))})`:`${dragSnap.name} Z₀ circle (through ${dragSnap.tag})`):`${dragSnap.kind} = ${nice(dragSnap.t)}`}</span>`:''}</div>`;
-    snapRing.style.display='block';snapRing.style.left=p.x+'px';snapRing.style.top=p.y+'px';snapRing.style.borderColor=p.col;
-    showTip(pointHTML(p,extra),p.x,p.y);return;
+    const now=performance.now(),noSnap=e.shiftKey||state.snap===false;
+    if(dwell){
+      // moving more than a few px restarts the dwell, so ordinary dragging keeps the gentle radius
+      if(Math.hypot(mx-dwell.x,my-dwell.y)>DWELL_MOVE){dwell.x=mx;dwell.y=my;dwell.t=now;}
+      dwell.mx=mx;dwell.my=my;dwell.noSnap=noSnap;
+      snapR=SNAP_BASE+(SNAP_MAX-SNAP_BASE)*Math.min(1,(now-dwell.t)/DWELL_MS);
+    }
+    dragTo(mx,my,noSnap);dragTip();return;
   }
   if(drag){view.cu-=(e.clientX-drag.x)/geom.S;view.cv+=(e.clientY-drag.y)/geom.S;drag={x:e.clientX,y:e.clientY};clampView();tip.style.display='none';snapRing.style.display='none';draw();return;}
   // hover: lock onto the nearest key point (load, component endpoints, target) within 14 px
